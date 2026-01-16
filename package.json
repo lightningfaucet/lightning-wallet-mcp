@@ -1,0 +1,45 @@
+{
+  "name": "lightning-faucet-mcp",
+  "version": "2.0.2",
+  "description": "MCP server for Lightning Faucet AI Agent Wallet - enables AI agents to send and receive Bitcoin via Lightning Network",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "lightning-faucet-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "lightning",
+    "bitcoin",
+    "ai-agent",
+    "l402",
+    "payments"
+  ],
+  "author": "Lightning Faucet",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lightningfaucet/mcp-server"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
