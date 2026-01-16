@@ -7,7 +7,7 @@
 
 ## What's New in v2.0
 
-**v2.0.4** is a security & stability release fixing 11 bugs including 3 critical security issues. All 31 tools now fully tested and production-ready.
+**v2.0.5** - Now published to the [Official MCP Registry](https://registry.modelcontextprotocol.io). All 31 tools fully tested and production-ready.
 
 - **Webhooks** - Real-time notifications for payments and events
 - **Keysend** - Send payments without invoices using node pubkeys
@@ -404,6 +404,11 @@ Lightning Faucet charges a small fee on outgoing payments:
 - **Webhooks:** Free
 
 ## Changelog
+
+### v2.0.5 (2026-01-16)
+- Published to [Official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.lightningfaucet/mcp-server`
+- Updated `mcpName` to use GitHub namespace format
+- Updated server.json schema to 2025-12-11
 
 ### v2.0.4 (2026-01-16)
 **Security & Stability Release** - Fixed 11 bugs including 3 critical security issues:
