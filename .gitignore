@@ -30,3 +30,5 @@ coverage/
 
 # TypeScript cache
 *.tsbuildinfo
+.mcpregistry_github_token
+.mcpregistry_registry_token
