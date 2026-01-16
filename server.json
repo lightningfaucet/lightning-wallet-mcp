@@ -1,0 +1,73 @@
+{
+  "name": "lightning-faucet-mcp",
+  "displayName": "Lightning Faucet - AI Agent Bitcoin Wallet",
+  "description": "Give your AI agent a Bitcoin wallet. Send and receive Bitcoin via Lightning Network with L402 protocol support, webhooks, keysend, budget management, and full transaction analytics.",
+  "vendor": "Lightning Faucet",
+  "version": "2.0.3",
+  "license": "MIT",
+  "sourceUrl": "https://github.com/lightningfaucet/mcp-server",
+  "homepage": "https://lightningfaucet.com/ai-agents/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lightningfaucet/mcp-server"
+  },
+  "runtime": "node",
+  "command": "npx",
+  "args": ["lightning-faucet-mcp"],
+  "categories": ["finance", "payments", "bitcoin", "cryptocurrency", "api"],
+  "keywords": [
+    "bitcoin",
+    "lightning-network",
+    "l402",
+    "payments",
+    "ai-agent",
+    "wallet",
+    "mcp",
+    "cryptocurrency",
+    "keysend",
+    "webhooks"
+  ],
+  "tools": [
+    "get_info",
+    "decode_invoice",
+    "whoami",
+    "check_balance",
+    "get_rate_limits",
+    "pay_l402_api",
+    "pay_invoice",
+    "keysend",
+    "create_invoice",
+    "get_invoice_status",
+    "get_transactions",
+    "export_transactions",
+    "register_operator",
+    "recover_account",
+    "rotate_api_key",
+    "get_deposit_invoice",
+    "withdraw",
+    "set_operator_key",
+    "create_agent",
+    "list_agents",
+    "fund_agent",
+    "transfer_to_agent",
+    "transfer_between_agents",
+    "withdraw_from_agent",
+    "deactivate_agent",
+    "reactivate_agent",
+    "delete_agent",
+    "get_budget_status",
+    "set_budget",
+    "get_agent_analytics",
+    "set_agent_credentials",
+    "register_webhook",
+    "list_webhooks",
+    "delete_webhook",
+    "test_webhook"
+  ],
+  "environmentVariables": {
+    "LIGHTNING_FAUCET_API_KEY": {
+      "description": "API key for Lightning Faucet (optional - can self-register)",
+      "required": false
+    }
+  }
+}
