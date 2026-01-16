@@ -7,7 +7,7 @@
 
 ## What's New in v2.0
 
-**v2.0.2** brings bug fixes for `recover_account` and `set_budget`. All 31 tools now fully tested and production-ready.
+**v2.0.4** is a security & stability release fixing 11 bugs including 3 critical security issues. All 31 tools now fully tested and production-ready.
 
 - **Webhooks** - Real-time notifications for payments and events
 - **Keysend** - Send payments without invoices using node pubkeys
@@ -405,9 +405,21 @@ Lightning Faucet charges a small fee on outgoing payments:
 
 ## Changelog
 
+### v2.0.4 (2026-01-16)
+**Security & Stability Release** - Fixed 11 bugs including 3 critical security issues:
+
+- **Security:** Fixed PHP/SQL/LND error exposure - Validates inputs, prevents internal info leaks
+- **Security:** Fixed XSS in webhook URLs - Rejects URLs containing HTML/script tags
+- **Logic:** Fixed transfer to self, double delete, deactivated agent error messages
+- **UX:** Improved error messages, fixed version mismatch, invalid format handling
+
+### v2.0.3 (2026-01-16)
+- Added `mcpName` for MCP registry verification
+- Added `server.json` for official MCP registry submission
+
 ### v2.0.2 (2026-01-16)
-- Fixed `recover_account` - Now correctly works without requiring an existing API key
-- Fixed `set_budget` - Added missing handler in backend API
+- Fixed `recover_account` - Now works without existing API key
+- Fixed `set_budget` - Added missing handler
 
 ### v2.0.1 (2026-01-15)
 - Fixed `delete_agent` - Resolved SQL duplicate key error on deletion
