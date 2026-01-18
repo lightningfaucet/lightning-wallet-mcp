@@ -35,6 +35,10 @@ import { LightningFaucetClient, registerOperator } from './lightning-faucet.js';
 // Get API key from environment (optional - can be set later via set_operator_key or set_agent_credentials)
 const API_KEY = process.env.LIGHTNING_FAUCET_API_KEY;
 
+// Global client instance for the current session
+// NOTE: This is intentionally global as MCP tools are invoked sequentially by the model.
+// If concurrent tool execution becomes supported, this would need to be refactored
+// to use per-request context or a connection pool.
 let client: LightningFaucetClient | null = API_KEY ? new LightningFaucetClient(API_KEY) : null;
 
 function requireClient(): LightningFaucetClient {

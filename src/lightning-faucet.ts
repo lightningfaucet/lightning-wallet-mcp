@@ -595,14 +595,27 @@ export class LightningFaucetClient {
       }>;
     }>('list_webhooks');
 
-    const webhooks = (result.webhooks || []).map(w => ({
-      id: w.id,
-      url: w.url,
-      events: Array.isArray(w.events) ? w.events : JSON.parse(w.events || '[]'),
-      isActive: w.is_active,
-      lastDeliveredAt: w.last_delivered_at,
-      failureCount: w.failure_count,
-    }));
+    const webhooks = (result.webhooks || []).map(w => {
+      let events: string[];
+      if (Array.isArray(w.events)) {
+        events = w.events;
+      } else {
+        try {
+          events = JSON.parse(w.events || '[]');
+        } catch {
+          // Handle malformed JSON gracefully
+          events = [];
+        }
+      }
+      return {
+        id: w.id,
+        url: w.url,
+        events,
+        isActive: w.is_active,
+        lastDeliveredAt: w.last_delivered_at,
+        failureCount: w.failure_count,
+      };
+    });
 
     return { webhooks, rawResponse: result };
   }

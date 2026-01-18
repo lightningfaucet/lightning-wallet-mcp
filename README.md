@@ -152,6 +152,10 @@ The L402 protocol (formerly LSAT) enables APIs to charge per-request using Light
 2. Lightning Faucet pays the invoice automatically
 3. Request completes with the paid content
 
+### L402 API Registry
+
+We maintain a directory of L402-enabled APIs at **[lightningfaucet.com/l402-registry](https://lightningfaucet.com/l402-registry/)** - perfect for testing your agents.
+
 ### Demo L402 APIs
 
 Try these endpoints to test L402 payments:
@@ -166,6 +170,8 @@ pay_l402_api({ url: "https://lightningfaucet.com/api/l402/joke" })
 # Get an inspirational quote (costs ~10-50 sats)
 pay_l402_api({ url: "https://lightningfaucet.com/api/l402/quote" })
 ```
+
+See the [L402 API Registry](https://lightningfaucet.com/l402-registry/) for more endpoints and resources.
 
 ## Complete Workflow Example
 
