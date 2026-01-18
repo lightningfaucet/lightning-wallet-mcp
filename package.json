@@ -1,6 +1,6 @@
 {
   "name": "lightning-faucet-mcp",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "mcpName": "io.github.lightningfaucet/mcp-server",
   "description": "MCP server for Lightning Faucet AI Agent Wallet - enables AI agents to send and receive Bitcoin via Lightning Network",
   "main": "dist/index.js",
