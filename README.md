@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/lightning-faucet-mcp.svg)](https://www.npmjs.com/package/lightning-faucet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Give your AI agent a Bitcoin wallet.** This MCP server enables AI agents to send and receive Bitcoin via the Lightning Network - the first step toward true AI economic autonomy.
+**Give your AI agent a Bitcoin wallet.** This MCP server enables AI agents to send and receive Bitcoin via the Lightning Network. The first step toward true AI economic autonomy.
 
 ## What's New in v2.0
 
