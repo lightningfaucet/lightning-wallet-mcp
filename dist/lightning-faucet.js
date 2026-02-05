@@ -96,10 +96,15 @@ class LightningFaucetClient {
             data.max_fee_sats = maxFeeSats;
         }
         const result = await this.request('pay_invoice', data);
+        const amountSats = result.amount_sats || result.amount_paid || 0;
+        const routingFeeSats = result.routing_fee_sats || 0;
+        const platformFeeSats = result.platform_fee_sats || 0;
         return {
             preimage: result.preimage || result.payment_preimage || '',
-            amountSats: result.amount_sats || result.amount_paid || 0,
-            feeSats: result.fee_sats || result.fee || 0,
+            amountSats,
+            routingFeeSats,
+            platformFeeSats,
+            totalCost: result.total_cost || (amountSats + routingFeeSats + platformFeeSats),
             paymentHash: result.payment_hash || '',
             newBalance: result.new_balance || 0,
             rawResponse: result,
@@ -509,9 +514,14 @@ class LightningFaucetClient {
      */
     async withdraw(invoice) {
         const result = await this.request('withdraw', { invoice });
+        const amountSats = result.amount_sats || 0;
+        const routingFeeSats = result.routing_fee_sats || 0;
+        const platformFeeSats = result.platform_fee_sats || 0;
         return {
-            amountSats: result.amount_sats || 0,
-            feeSats: result.fee_sats || 0,
+            amountSats,
+            routingFeeSats,
+            platformFeeSats,
+            totalCost: result.total_cost || (amountSats + routingFeeSats + platformFeeSats),
             paymentHash: result.payment_hash || '',
             newBalance: result.new_balance || 0,
             rawResponse: result,
@@ -672,10 +682,15 @@ class LightningFaucetClient {
         if (message)
             data.message = message;
         const result = await this.request('keysend', data);
+        const amt = result.amount_sats || amountSats;
+        const routingFeeSats = result.routing_fee_sats || 0;
+        const platformFeeSats = result.platform_fee_sats || 0;
         return {
             preimage: result.preimage || '',
-            amountSats: result.amount_sats || amountSats,
-            feeSats: result.fee_sats || 0,
+            amountSats: amt,
+            routingFeeSats,
+            platformFeeSats,
+            totalCost: result.total_cost || (amt + routingFeeSats + platformFeeSats),
             newBalance: result.new_balance || 0,
             rawResponse: result,
         };

@@ -252,7 +252,9 @@ export class LightningFaucetClient {
   ): Promise<{
     preimage: string;
     amountSats: number;
-    feeSats: number;
+    routingFeeSats: number;
+    platformFeeSats: number;
+    totalCost: number;
     paymentHash: string;
     newBalance: number;
     rawResponse: PayInvoiceResponse;
@@ -267,10 +269,16 @@ export class LightningFaucetClient {
 
     const result = await this.request<PayInvoiceResponse>('pay_invoice', data);
 
+    const amountSats = result.amount_sats || result.amount_paid || 0;
+    const routingFeeSats = (result as any).routing_fee_sats || 0;
+    const platformFeeSats = (result as any).platform_fee_sats || 0;
+
     return {
       preimage: result.preimage || result.payment_preimage || '',
-      amountSats: result.amount_sats || result.amount_paid || 0,
-      feeSats: result.fee_sats || result.fee || 0,
+      amountSats,
+      routingFeeSats,
+      platformFeeSats,
+      totalCost: (result as any).total_cost || (amountSats + routingFeeSats + platformFeeSats),
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
       rawResponse: result,
@@ -949,21 +957,31 @@ export class LightningFaucetClient {
    */
   async withdraw(invoice: string): Promise<{
     amountSats: number;
-    feeSats: number;
+    routingFeeSats: number;
+    platformFeeSats: number;
+    totalCost: number;
     paymentHash: string;
     newBalance: number;
     rawResponse: ApiResponse;
   }> {
     const result = await this.request<ApiResponse & {
       amount_sats?: number;
-      fee_sats?: number;
+      routing_fee_sats?: number;
+      platform_fee_sats?: number;
+      total_cost?: number;
       payment_hash?: string;
       new_balance?: number;
     }>('withdraw', { invoice });
 
+    const amountSats = result.amount_sats || 0;
+    const routingFeeSats = result.routing_fee_sats || 0;
+    const platformFeeSats = result.platform_fee_sats || 0;
+
     return {
-      amountSats: result.amount_sats || 0,
-      feeSats: result.fee_sats || 0,
+      amountSats,
+      routingFeeSats,
+      platformFeeSats,
+      totalCost: result.total_cost || (amountSats + routingFeeSats + platformFeeSats),
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
       rawResponse: result,
@@ -1235,7 +1253,9 @@ export class LightningFaucetClient {
   ): Promise<{
     preimage: string;
     amountSats: number;
-    feeSats: number;
+    routingFeeSats: number;
+    platformFeeSats: number;
+    totalCost: number;
     newBalance: number;
     rawResponse: ApiResponse;
   }> {
@@ -1248,14 +1268,22 @@ export class LightningFaucetClient {
     const result = await this.request<ApiResponse & {
       preimage?: string;
       amount_sats?: number;
-      fee_sats?: number;
+      routing_fee_sats?: number;
+      platform_fee_sats?: number;
+      total_cost?: number;
       new_balance?: number;
     }>('keysend', data);
 
+    const amt = result.amount_sats || amountSats;
+    const routingFeeSats = result.routing_fee_sats || 0;
+    const platformFeeSats = result.platform_fee_sats || 0;
+
     return {
       preimage: result.preimage || '',
-      amountSats: result.amount_sats || amountSats,
-      feeSats: result.fee_sats || 0,
+      amountSats: amt,
+      routingFeeSats,
+      platformFeeSats,
+      totalCost: result.total_cost || (amt + routingFeeSats + platformFeeSats),
       newBalance: result.new_balance || 0,
       rawResponse: result,
     };

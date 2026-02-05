@@ -410,15 +410,25 @@ Check the `X-Webhook-Signature` header against the payload.
 
 ## Pricing
 
-Lightning Faucet charges a small fee on outgoing payments:
-- **L402 payments:** 2% fee (min 1 sat)
-- **Invoice payments:** 2% fee (min 1 sat)
-- **Keysend payments:** 2% fee (min 1 sat)
+Lightning Faucet charges a 2% platform fee (min 1 sat) on outgoing payments:
+- **L402 payments:** 2% platform fee + Lightning routing fee
+- **Invoice payments:** 2% platform fee + Lightning routing fee
+- **Keysend payments:** 2% platform fee + Lightning routing fee
+- **Operator withdrawals:** 2% platform fee + Lightning routing fee
+- **Cross-operator internal transfers:** 2% platform fee (no routing fee)
+- **Same-operator agent transfers:** Free
 - **Deposits:** Free
 - **Receiving payments:** Free
 - **Webhooks:** Free
 
+All payment responses include `platform_fee_sats`, `routing_fee_sats`, and `total_cost` for full transparency.
+
 ## Changelog
+
+### v1.0.3 (2026-02-05)
+- **Platform fee:** 2% fee (min 1 sat) on all outgoing payments and cross-operator transfers
+- **Fee transparency:** All payment responses now include `platform_fee_sats`, `routing_fee_sats`, and `total_cost`
+- Same-operator agent transfers remain free
 
 ### v1.0.0 (2026-02-04)
 - **Rebranded** from `lightning-faucet-mcp` to `lightning-wallet-mcp`

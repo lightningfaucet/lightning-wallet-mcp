@@ -141,7 +141,9 @@ export declare class LightningFaucetClient {
     payInvoice(bolt11: string, maxFeeSats?: number): Promise<{
         preimage: string;
         amountSats: number;
-        feeSats: number;
+        routingFeeSats: number;
+        platformFeeSats: number;
+        totalCost: number;
         paymentHash: string;
         newBalance: number;
         rawResponse: PayInvoiceResponse;
@@ -370,7 +372,9 @@ export declare class LightningFaucetClient {
      */
     withdraw(invoice: string): Promise<{
         amountSats: number;
-        feeSats: number;
+        routingFeeSats: number;
+        platformFeeSats: number;
+        totalCost: number;
         paymentHash: string;
         newBalance: number;
         rawResponse: ApiResponse;
@@ -461,7 +465,9 @@ export declare class LightningFaucetClient {
     keysend(destination: string, amountSats: number, message?: string): Promise<{
         preimage: string;
         amountSats: number;
-        feeSats: number;
+        routingFeeSats: number;
+        platformFeeSats: number;
+        totalCost: number;
         newBalance: number;
         rawResponse: ApiResponse;
     }>;
