@@ -9,7 +9,7 @@
 
 ## What's New in v1.0
 
-**v1.0.0** - Rebranded from `lightning-faucet-mcp` to `lightning-wallet-mcp`. All 31 tools fully tested and production-ready.
+**v1.0.0** - Rebranded from `lightning-faucet-mcp` to `lightning-wallet-mcp`. All 37 tools fully tested and production-ready.
 
 - **Webhooks** - Real-time notifications for payments and events
 - **Keysend** - Send payments without invoices using node pubkeys
@@ -95,10 +95,18 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 | `pay_l402_api` | Access L402-protected APIs - automatically pays Lightning invoice |
 | `pay_invoice` | Pay any BOLT11 Lightning invoice |
 | `keysend` | Send payment directly to a node pubkey (no invoice needed) |
+| `pay_lightning_address` | Pay to a Lightning address (user@domain.com format) |
 | `create_invoice` | Generate invoice to receive payments |
 | `get_invoice_status` | Check if an invoice has been paid |
 | `get_transactions` | View transaction history |
 | `export_transactions` | Export transactions in JSON or CSV format |
+
+### LNURL (Agent Key Required)
+
+| Tool | Description |
+|------|-------------|
+| `lnurl_auth` | Authenticate to a service using LNURL-auth protocol |
+| `claim_lnurl_withdraw` | Claim funds from an LNURL-withdraw link |
 
 ### Operator Management
 
@@ -118,9 +126,8 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 | `create_agent` | Create agent under operator |
 | `list_agents` | List all agents under operator |
 | `fund_agent` | Transfer sats from operator to agent |
-| `transfer_to_agent` | Transfer funds to an agent |
-| `transfer_between_agents` | Transfer funds between two agents |
-| `withdraw_from_agent` | Sweep funds from agent back to operator |
+| `transfer_to_agent` | Transfer sats between agents or from operator to agent |
+| `sweep_agent` | Sweep funds from agent back to operator |
 | `deactivate_agent` | Temporarily disable an agent |
 | `reactivate_agent` | Re-enable a deactivated agent |
 | `delete_agent` | Permanently delete an agent (returns balance to operator) |
@@ -226,7 +233,7 @@ export_transactions({ format: "csv" })
 // Returns: { format: "csv", count: 5, csv: "..." }
 ```
 
-## New in v2.0.0: Keysend Payments
+## Keysend Payments
 
 Send payments directly to a Lightning node without needing an invoice:
 
@@ -239,7 +246,7 @@ keysend({
 })
 ```
 
-## New in v2.0.0: Invoice Decoding
+## Invoice Decoding
 
 Check invoice details before paying:
 
@@ -263,7 +270,7 @@ Get service status and capabilities.
 ```json
 {
   "success": true,
-  "version": "2.0.0",
+  "version": "1.0.1",
   "api_version": "1.0",
   "status": "operational",
   "max_payment_sats": 1000000,
@@ -416,13 +423,22 @@ Lightning Faucet charges a small fee on outgoing payments:
 ### v1.0.0 (2026-02-04)
 - **Rebranded** from `lightning-faucet-mcp` to `lightning-wallet-mcp`
 - Environment variable renamed: `LIGHTNING_FAUCET_API_KEY` → `LIGHTNING_WALLET_API_KEY`
-- All 31 tools fully tested and production-ready
+- All 37 tools fully tested and production-ready
 - No breaking API changes - just the package name
 
 ### Previous releases (as lightning-faucet-mcp)
 
 See the [lightning-faucet-mcp changelog](https://www.npmjs.com/package/lightning-faucet-mcp) for v1.6.0 through v2.0.7 history.
 - Basic payments and invoices
+
+## Showcase: AI Agent Game Theory Experiment
+
+We ran a 100-round economic experiment with 16 AI agents (8 Claude, 8 GPT-4o) using real Bitcoin on Lightning. Agents could trade, form alliances, invest, and compete — all powered by this MCP server.
+
+**Results:** Agents completed 2,839 real Lightning transactions. Claude agents dominated through aggressive early trading while GPT-4o agents adopted conservative strategies.
+
+- **Experiment repo:** [github.com/pfergi42/lf-game-theory](https://github.com/pfergi42/lf-game-theory)
+- **Blog post:** [lightningfaucet.com/blog/ai-game-theory](https://lightningfaucet.com/blog/ai-game-theory)
 
 ## Support
 
