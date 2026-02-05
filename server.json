@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.lightningfaucet/mcp-server",
+  "name": "io.github.lightningfaucet/lightning-wallet-mcp",
   "description": "Give AI agents a Bitcoin wallet with Lightning Network payments and L402 support.",
   "status": "active",
   "repository": {
-    "url": "https://github.com/lightningfaucet/mcp-server",
+    "url": "https://github.com/lightningfaucet/lightning-wallet-mcp",
     "source": "github"
   },
-  "version": "2.0.6",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "lightning-faucet-mcp",
-      "version": "2.0.6",
+      "identifier": "lightning-wallet-mcp",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       }

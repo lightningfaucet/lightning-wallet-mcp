@@ -1,13 +1,15 @@
-# Lightning Faucet MCP Server
+# Lightning Wallet MCP Server
 
-[![npm version](https://img.shields.io/npm/v/lightning-faucet-mcp.svg)](https://www.npmjs.com/package/lightning-faucet-mcp)
+[![npm version](https://img.shields.io/npm/v/lightning-wallet-mcp.svg)](https://www.npmjs.com/package/lightning-wallet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Give your AI agent a Bitcoin wallet.** This MCP server enables AI agents to send and receive Bitcoin via the Lightning Network. The first step toward true AI economic autonomy.
 
-## What's New in v2.0
+> **Note:** This package was previously published as `lightning-faucet-mcp`. The functionality is identical.
 
-**v2.0.5** - Now published to the [Official MCP Registry](https://registry.modelcontextprotocol.io). All 31 tools fully tested and production-ready.
+## What's New in v1.0
+
+**v1.0.0** - Rebranded from `lightning-faucet-mcp` to `lightning-wallet-mcp`. All 31 tools fully tested and production-ready.
 
 - **Webhooks** - Real-time notifications for payments and events
 - **Keysend** - Send payments without invoices using node pubkeys
@@ -19,7 +21,7 @@
 - **Account Recovery** - Recover accounts and rotate API keys
 - **Agent-to-Agent Transfers** - Move funds between your agents
 
-## Why Lightning Faucet?
+## Why Lightning Wallet MCP?
 
 - **Instant Payments** - Lightning Network transactions settle in milliseconds
 - **L402 Protocol Support** - Access any L402-protected API automatically
@@ -38,15 +40,15 @@ The MCP server can register itself! Just configure Claude Code without an API ke
 ```json
 {
   "mcpServers": {
-    "lightning-faucet": {
+    "lightning-wallet": {
       "command": "npx",
-      "args": ["lightning-faucet-mcp"]
+      "args": ["lightning-wallet-mcp"]
     }
   }
 }
 ```
 
-Then ask Claude: *"Register a new Lightning Faucet operator account"*
+Then ask Claude: *"Register a new Lightning Wallet operator account"*
 
 Claude will use `register_operator` to create an account, then `set_operator_key` to activate it.
 
@@ -58,11 +60,11 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 ```json
 {
   "mcpServers": {
-    "lightning-faucet": {
+    "lightning-wallet": {
       "command": "npx",
-      "args": ["lightning-faucet-mcp"],
+      "args": ["lightning-wallet-mcp"],
       "env": {
-        "LIGHTNING_FAUCET_API_KEY": "your-api-key-here"
+        "LIGHTNING_WALLET_API_KEY": "your-api-key-here"
       }
     }
   }
@@ -411,55 +413,22 @@ Lightning Faucet charges a small fee on outgoing payments:
 
 ## Changelog
 
-### v2.0.5 (2026-01-16)
-- Published to [Official MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.lightningfaucet/mcp-server`
-- Updated `mcpName` to use GitHub namespace format
-- Updated server.json schema to 2025-12-11
+### v1.0.0 (2026-02-04)
+- **Rebranded** from `lightning-faucet-mcp` to `lightning-wallet-mcp`
+- Environment variable renamed: `LIGHTNING_FAUCET_API_KEY` → `LIGHTNING_WALLET_API_KEY`
+- All 31 tools fully tested and production-ready
+- No breaking API changes - just the package name
 
-### v2.0.4 (2026-01-16)
-**Security & Stability Release** - Fixed 11 bugs including 3 critical security issues:
+### Previous releases (as lightning-faucet-mcp)
 
-- **Security:** Fixed PHP/SQL/LND error exposure - Validates inputs, prevents internal info leaks
-- **Security:** Fixed XSS in webhook URLs - Rejects URLs containing HTML/script tags
-- **Logic:** Fixed transfer to self, double delete, deactivated agent error messages
-- **UX:** Improved error messages, fixed version mismatch, invalid format handling
-
-### v2.0.3 (2026-01-16)
-- Added `mcpName` for MCP registry verification
-- Added `server.json` for official MCP registry submission
-
-### v2.0.2 (2026-01-16)
-- Fixed `recover_account` - Now works without existing API key
-- Fixed `set_budget` - Added missing handler
-
-### v2.0.1 (2026-01-15)
-- Fixed `delete_agent` - Resolved SQL duplicate key error on deletion
-- Changed API URL from `/api.php` to cleaner `/api` endpoint
-
-### v2.0.0 (2026-01-15)
-- Added `get_info` - Service status and capabilities
-- Added `decode_invoice` - BOLT11 invoice decoding
-- Added `keysend` - Payments without invoices
-- Added `register_webhook`, `list_webhooks`, `delete_webhook`, `test_webhook`
-- Added `get_budget_status`, `set_budget` - Budget management
-- Added `deactivate_agent`, `reactivate_agent`, `delete_agent` - Agent lifecycle
-- Added `recover_account`, `rotate_api_key` - Account recovery
-- Added `export_transactions` - JSON/CSV export
-- Added `get_agent_analytics` - Usage analytics
-- Added `transfer_between_agents` - Agent-to-agent transfers
-- Added `get_rate_limits` - Rate limit status
-
-### v1.6.0
-- Initial public release
-- L402 protocol support
-- Operator/agent hierarchy
+See the [lightning-faucet-mcp changelog](https://www.npmjs.com/package/lightning-faucet-mcp) for v1.6.0 through v2.0.7 history.
 - Basic payments and invoices
 
 ## Support
 
 - **Documentation:** [lightningfaucet.com/ai-agents/docs](https://lightningfaucet.com/ai-agents/docs/)
 - **Demo:** [lightningfaucet.com/ai-agents/demo](https://lightningfaucet.com/ai-agents/demo/)
-- **Issues:** [github.com/lightningfaucet/mcp-server/issues](https://github.com/lightningfaucet/mcp-server/issues)
+- **Issues:** [github.com/lightningfaucet/lightning-wallet-mcp/issues](https://github.com/lightningfaucet/lightning-wallet-mcp/issues)
 - **Email:** support@lightningfaucet.com
 
 ## License

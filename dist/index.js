@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 "use strict";
 /**
- * Lightning Faucet MCP Server
+ * Lightning Wallet MCP Server
  *
  * Provides AI agents with Lightning Network payment capabilities via MCP.
  *
  * Configuration:
- *   Set LIGHTNING_FAUCET_API_KEY environment variable with your agent API key.
+ *   Set LIGHTNING_WALLET_API_KEY environment variable with your agent API key.
  *   Get an API key at: https://lightningfaucet.com/ai-agents/
  *
  * Usage with Claude Code:
  *   Add to .claude/settings.json:
  *   {
  *     "mcpServers": {
- *       "lightning-faucet": {
+ *       "lightning-wallet": {
  *         "command": "npx",
- *         "args": ["@anthropic/lightning-faucet-mcp"],
+ *         "args": ["lightning-wallet-mcp"],
  *         "env": {
- *           "LIGHTNING_FAUCET_API_KEY": "your-api-key-here"
+ *           "LIGHTNING_WALLET_API_KEY": "your-api-key-here"
  *         }
  *       }
  *     }
@@ -30,7 +30,8 @@ const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const zod_1 = require("zod");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
 // Get API key from environment (optional - can be set later via set_operator_key or set_agent_credentials)
-const API_KEY = process.env.LIGHTNING_FAUCET_API_KEY;
+// Supports both new and legacy env var names for backwards compatibility
+const API_KEY = process.env.LIGHTNING_WALLET_API_KEY || process.env.LIGHTNING_FAUCET_API_KEY;
 // Global client instance for the current session
 // NOTE: This is intentionally global as MCP tools are invoked sequentially by the model.
 // If concurrent tool execution becomes supported, this would need to be refactored
@@ -38,13 +39,13 @@ const API_KEY = process.env.LIGHTNING_FAUCET_API_KEY;
 let client = API_KEY ? new lightning_faucet_js_1.LightningFaucetClient(API_KEY) : null;
 function requireClient() {
     if (!client) {
-        throw new Error('No API key configured. Use set_operator_key or set_agent_credentials first, or set LIGHTNING_FAUCET_API_KEY environment variable.');
+        throw new Error('No API key configured. Use set_operator_key or set_agent_credentials first, or set LIGHTNING_WALLET_API_KEY environment variable.');
     }
     return client;
 }
 // Create MCP server
 const server = new index_js_1.Server({
-    name: 'lightning-faucet',
+    name: 'lightning-wallet',
     version: '1.0.0',
 }, {
     capabilities: {
@@ -1407,7 +1408,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
 async function main() {
     const transport = new stdio_js_1.StdioServerTransport();
     await server.connect(transport);
-    console.error('Lightning Faucet MCP server running on stdio');
+    console.error('Lightning Wallet MCP server running on stdio');
 }
 main().catch((error) => {
     console.error('Fatal error:', error);

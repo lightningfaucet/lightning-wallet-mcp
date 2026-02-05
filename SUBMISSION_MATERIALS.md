@@ -1,19 +1,19 @@
 # MCP Registry Submission Materials
 
-Use these details to submit Lightning Faucet MCP to various registries.
+Use these details to submit Lightning Wallet MCP to various registries.
 
 ## Basic Info
 
-- **Name**: lightning-faucet-mcp
-- **Display Name**: Lightning Faucet - AI Agent Bitcoin Wallet
-- **Version**: 2.0.2
+- **Name**: lightning-wallet-mcp
+- **Display Name**: Lightning Wallet - AI Agent Bitcoin Wallet
+- **Version**: 1.0.0
 - **Author/Vendor**: Lightning Faucet
 - **License**: MIT
 
 ## URLs
 
-- **npm**: https://www.npmjs.com/package/lightning-faucet-mcp
-- **GitHub**: https://github.com/lightningfaucet/mcp-server
+- **npm**: https://www.npmjs.com/package/lightning-wallet-mcp
+- **GitHub**: https://github.com/lightningfaucet/lightning-wallet-mcp
 - **Homepage**: https://lightningfaucet.com/ai-agents/
 - **Documentation**: https://lightningfaucet.com/ai-agents/docs/
 
@@ -51,13 +51,13 @@ Give your AI agent a Bitcoin wallet. This MCP server enables AI agents to send a
 ## Installation
 
 ```bash
-npx lightning-faucet-mcp
+npx lightning-wallet-mcp
 ```
 
 Or with npm:
 
 ```bash
-npm install -g lightning-faucet-mcp
+npm install -g lightning-wallet-mcp
 ```
 
 ## Configuration (Claude Code)
@@ -65,9 +65,9 @@ npm install -g lightning-faucet-mcp
 ```json
 {
   "mcpServers": {
-    "lightning-faucet": {
+    "lightning-wallet": {
       "command": "npx",
-      "args": ["lightning-faucet-mcp"]
+      "args": ["lightning-wallet-mcp"]
     }
   }
 }
@@ -137,52 +137,44 @@ npm install -g lightning-faucet-mcp
 
 ---
 
-## Registry-Specific Submissions
+## External Updates Required (Rebrand from lightning-faucet-mcp)
 
-### 1. Official MCP Registry (modelcontextprotocol.io)
+### Already Submitted (need updates)
 
-**Status**: Requires publisher CLI tool
-**URL**: https://registry.modelcontextprotocol.io
-**Process**: Use `mcp-publisher` CLI with GitHub OAuth
+1. **Official MCP Registry** - https://registry.modelcontextprotocol.io
+   - Old: io.github.lightningfaucet/mcp-server
+   - New: io.github.lightningfaucet/lightning-wallet-mcp
+   - Action: Re-publish with new name
 
-### 2. PulseMCP
+2. **npm** - https://www.npmjs.com/package/lightning-faucet-mcp
+   - Action: Publish lightning-wallet-mcp, deprecate old package
+   - Command: `npm deprecate lightning-faucet-mcp "Renamed to lightning-wallet-mcp"`
 
-**Status**: Ready for submission
-**URL**: https://www.pulsemcp.com/submit
-**Type**: MCP Server
-**URL to submit**: https://github.com/lightningfaucet/mcp-server
+3. **GitHub** - https://github.com/lightningfaucet/mcp-server
+   - Action: Rename repo to lightning-wallet-mcp
+   - GitHub provides automatic redirects
 
-### 3. MCP.so
+4. **PulseMCP** - Submitted
+   - Action: Contact to update listing
 
-**Status**: Ready for submission
-**URL**: https://mcp.so/submit
-**Type**: MCP Server
-**Name**: Lightning Faucet MCP
-**URL to submit**: https://github.com/lightningfaucet/mcp-server
+5. **MCP.so** - Submitted
+   - Action: Contact to update listing
 
-### 4. Glama
+6. **Glama** - Submitted
+   - Action: Contact to update listing
 
-**Status**: Ready for submission
-**URL**: https://glama.ai/mcp/servers
-**Process**: Look for "Add Server" button
+7. **LinkedIn** - Posted
+   - Action: New post announcing rebrand
 
-### 5. Smithery.ai
+8. **lf-game-theory repo** - https://github.com/pfergi42/lf-game-theory
+   - Action: Update references to new package name
 
-**Status**: Requires CLI setup
-**URL**: https://smithery.ai
-**Process**: Fork reference servers repo, use `smithery publish`
+### Website Updates (lightningfaucet.com)
 
-### 6. mcp-get
-
-**Status**: PR prepared (but deprecated in favor of Smithery)
-**URL**: https://github.com/michaellatman/mcp-get
-**File**: packages/lightning-faucet-mcp.json
-
-### 7. GitHub MCP Registry
-
-**Status**: Check submission process
-**URL**: https://github.com/mcp
+- /ai-agents/ - Update package name in docs
+- /ai-agents/docs/ - Update installation instructions
+- Any blog posts mentioning the package
 
 ---
 
-Generated: 2026-01-16
+Generated: 2026-02-04
