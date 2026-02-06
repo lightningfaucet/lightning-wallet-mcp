@@ -7,10 +7,12 @@
 
 > **Note:** This package was previously published as `lightning-faucet-mcp`. The functionality is identical.
 
-## What's New in v1.0
+## What's New in v1.1
 
-**v1.0.0** - Rebranded from `lightning-faucet-mcp` to `lightning-wallet-mcp`. All 37 tools fully tested and production-ready.
+**v1.1.0** - X402 protocol support (USDC on Base) as automatic fallback alongside L402 (Lightning).
 
+- **X402 Support** - Automatic USDC payments on Base when L402 isn't available
+- **Protocol Auto-Detection** - `pay_l402_api` seamlessly handles both L402 and X402
 - **Webhooks** - Real-time notifications for payments and events
 - **Keysend** - Send payments without invoices using node pubkeys
 - **Invoice Decoding** - Decode BOLT11 invoices before paying
@@ -24,7 +26,7 @@
 ## Why Lightning Wallet MCP?
 
 - **Instant Payments** - Lightning Network transactions settle in milliseconds
-- **L402 Protocol Support** - Access any L402-protected API automatically
+- **L402 + X402 Protocol Support** - Access any paid API automatically (Lightning or USDC)
 - **Operator/Agent Hierarchy** - Manage multiple agents with spending limits
 - **No Custody Risk** - Each agent has isolated funds with operator oversight
 - **Production Ready** - Battle-tested infrastructure powering real transactions
@@ -92,7 +94,7 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 
 | Tool | Description |
 |------|-------------|
-| `pay_l402_api` | Access L402-protected APIs - automatically pays Lightning invoice |
+| `pay_l402_api` | Access paid APIs (L402/X402) - auto-detects protocol and pays |
 | `pay_invoice` | Pay any BOLT11 Lightning invoice |
 | `keysend` | Send payment directly to a node pubkey (no invoice needed) |
 | `pay_lightning_address` | Pay to a Lightning address (user@domain.com format) |
@@ -153,13 +155,33 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 - `budget_warning` - 80% of budget consumed
 - `test` - Manual test event
 
-## L402 Protocol: Pay-Per-Request APIs
+## Paid API Protocols: L402 + X402
+
+Lightning Wallet MCP supports two HTTP 402 payment protocols:
+
+- **L402 (primary)** - Lightning Network payments. The original pay-per-request protocol.
+- **X402 (fallback)** - USDC on Base (Coinbase's protocol). Auto-detected when L402 isn't available.
+
+When you call `pay_l402_api`, the server automatically detects which protocol the API uses. L402 always takes priority if both headers are present. Agents always pay in sats regardless of protocol — X402 amounts are converted at market rate.
+
+### L402 Protocol
 
 The L402 protocol (formerly LSAT) enables APIs to charge per-request using Lightning. When you call an L402-protected endpoint:
 
 1. Server returns HTTP 402 with a Lightning invoice
 2. Lightning Faucet pays the invoice automatically
 3. Request completes with the paid content
+
+### X402 Protocol (Coinbase)
+
+X402 uses USDC on Base for API payments. The flow is transparent to agents:
+
+1. Server returns HTTP 402 with `PAYMENT-REQUIRED` header
+2. Lightning Faucet converts USDC amount to sats, debits agent balance
+3. Signs an EIP-712 authorization and retries with `PAYMENT-SIGNATURE` header
+4. Request completes — agent sees the same response format as L402
+
+The response includes `payment_protocol: "x402"` and `usdc_amount` so agents know which protocol was used.
 
 ### L402 API Registry
 
@@ -275,7 +297,7 @@ Get service status and capabilities.
   "status": "operational",
   "max_payment_sats": 1000000,
   "min_payment_sats": 1,
-  "supported_features": ["l402", "webhooks", "lightning_address", "keysend"]
+  "supported_features": ["l402", "x402", "webhooks", "lightning_address", "keysend"]
 }
 ```
 
@@ -308,7 +330,7 @@ Get current operating context.
 
 ### pay_l402_api
 
-Access L402-protected APIs with automatic payment.
+Access paid APIs with automatic payment. Supports both L402 (Lightning) and X402 (USDC on Base) protocols. Protocol is auto-detected from the 402 response headers.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -412,6 +434,7 @@ Check the `X-Webhook-Signature` header against the payload.
 
 Lightning Faucet charges a 2% platform fee (min 1 sat) on outgoing payments:
 - **L402 payments:** 2% platform fee + Lightning routing fee
+- **X402 payments:** 2% platform fee + 1% exchange rate spread (USDC to sats conversion)
 - **Invoice payments:** 2% platform fee + Lightning routing fee
 - **Keysend payments:** 2% platform fee + Lightning routing fee
 - **Operator withdrawals:** 2% platform fee + Lightning routing fee
@@ -424,6 +447,12 @@ Lightning Faucet charges a 2% platform fee (min 1 sat) on outgoing payments:
 All payment responses include `platform_fee_sats`, `routing_fee_sats`, and `total_cost` for full transparency.
 
 ## Changelog
+
+### v1.1.0 (2026-02-06)
+- **X402 support:** Automatic fallback to X402 (USDC on Base) when L402 is not available
+- **Protocol auto-detection:** `pay_l402_api` detects L402 or X402 from 402 response headers
+- **Response fields:** `payment_protocol` and `usdc_amount` included when X402 is used
+- **Exchange rate:** Real-time BTC/USD conversion via CoinGecko with 5-min cache
 
 ### v1.0.3 (2026-02-05)
 - **Platform fee:** 2% fee (min 1 sat) on all outgoing payments and cross-operator transfers

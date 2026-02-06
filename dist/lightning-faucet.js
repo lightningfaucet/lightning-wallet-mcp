@@ -82,6 +82,8 @@ class LightningFaucetClient {
             paymentHash: result.payment_hash,
             amountPaid: result.amount_paid,
             fee: result.fee,
+            paymentProtocol: result.payment_protocol,
+            usdcAmount: result.usdc_amount,
             rawResponse: result,
         };
     }

@@ -248,7 +248,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'pay_l402_api',
-      description: 'Make a request to an L402-protected API. If payment is required (HTTP 402), automatically pay the Lightning invoice and complete the request. REQUIRES AGENT KEY - use set_agent_credentials first if operating as an operator.',
+      description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. REQUIRES AGENT KEY.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -739,19 +739,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const message = targetSuccess
           ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
           : `Target returned HTTP ${result.statusCode}`;
+        const responseData: Record<string, unknown> = {
+          success: targetSuccess,
+          message,
+          status_code: result.statusCode,
+          data: result.data,
+          payment_hash: result.paymentHash,
+          amount_paid: result.amountPaid,
+          fee: result.fee,
+        };
+        if (result.paymentProtocol) {
+          responseData.payment_protocol = result.paymentProtocol;
+        }
+        if (result.usdcAmount !== undefined) {
+          responseData.usdc_amount = result.usdcAmount;
+        }
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                success: targetSuccess,
-                message,
-                status_code: result.statusCode,
-                data: result.data,
-                payment_hash: result.paymentHash,
-                amount_paid: result.amountPaid,
-                fee: result.fee,
-              }, null, 2),
+              text: JSON.stringify(responseData, null, 2),
             },
           ],
         };

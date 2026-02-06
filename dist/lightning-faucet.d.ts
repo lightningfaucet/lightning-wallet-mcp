@@ -18,6 +18,8 @@ interface L402PayResponse extends ApiResponse {
     payment_hash?: string;
     amount_paid?: number;
     fee?: number;
+    payment_protocol?: 'l402' | 'x402';
+    usdc_amount?: number;
 }
 interface PayInvoiceResponse extends ApiResponse {
     preimage?: string;
@@ -133,6 +135,8 @@ export declare class LightningFaucetClient {
         paymentHash?: string;
         amountPaid?: number;
         fee?: number;
+        paymentProtocol?: 'l402' | 'x402';
+        usdcAmount?: number;
         rawResponse: L402PayResponse;
     }>;
     /**
