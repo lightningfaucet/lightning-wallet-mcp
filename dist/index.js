@@ -106,7 +106,7 @@ const WhoamiSchema = zod_1.z.object({});
 // ==========================================
 const RegisterWebhookSchema = zod_1.z.object({
     url: zod_1.z.string().url().describe('HTTPS webhook URL to receive events'),
-    events: zod_1.z.array(zod_1.z.enum(['invoice_paid', 'payment_completed', 'payment_failed', 'balance_low', 'budget_warning', 'test']))
+    events: zod_1.z.array(zod_1.z.enum(['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'test']))
         .default(['invoice_paid']).describe('Event types to subscribe to'),
 });
 const ListWebhooksSchema = zod_1.z.object({});
@@ -374,7 +374,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                     url: { type: 'string', description: 'HTTPS webhook URL to receive events' },
                     events: {
                         type: 'array',
-                        items: { type: 'string', enum: ['invoice_paid', 'payment_completed', 'payment_failed', 'balance_low', 'budget_warning', 'test'] },
+                        items: { type: 'string', enum: ['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'test'] },
                         default: ['invoice_paid'],
                         description: 'Event types to subscribe to',
                     },
