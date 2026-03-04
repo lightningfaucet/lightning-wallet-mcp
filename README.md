@@ -1,9 +1,9 @@
-# Lightning Wallet MCP Server
+# Lightning Wallet
 
 [![npm version](https://img.shields.io/npm/v/lightning-wallet-mcp.svg)](https://www.npmjs.com/package/lightning-wallet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Give your AI agent a Bitcoin wallet.** This MCP server enables AI agents to send and receive Bitcoin via the Lightning Network. The first step toward true AI economic autonomy.
+**Give your AI agent a Bitcoin wallet.** MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.
 
 > **Note:** This package was previously published as `lightning-faucet-mcp`. The functionality is identical.
 
@@ -33,11 +33,45 @@
 - **Webhook Notifications** - Get notified instantly when payments arrive
 - **Full Observability** - Analytics, exports, and detailed status tracking
 
-## Quick Start
+## Two Ways to Use
 
-### Option 1: Self-Registration (No Account Needed)
+### CLI (Any Agent Framework)
 
-The MCP server can register itself! Just configure Claude Code without an API key:
+For CLI-first agents (OpenClaw, Pi, KiloCode, or any agent with Bash access):
+
+```bash
+npm install -g lightning-wallet-mcp
+```
+
+This installs the `lw` command:
+
+```bash
+# Register and save your API key
+export LIGHTNING_WALLET_API_KEY=$(lw register --name "My Bot" | jq -r '.api_key')
+
+# Check balance
+lw balance | jq '.balance_sats'
+
+# Pay an L402 API
+lw pay-api "https://lightningfaucet.com/api/l402/fortune"
+
+# Create and fund an agent
+lw create-agent "Research Bot" --budget 5000
+lw fund-agent 1 1000
+
+# Check identity
+lw whoami
+```
+
+Output is JSON by default (pipe to `jq`). Use `--human` for readable output.
+
+Run `lw help` for all commands.
+
+### MCP Server (Claude Code, Cursor, Windsurf)
+
+For MCP-native clients, configure as an MCP server:
+
+**Option A: Self-Registration**
 
 ```json
 {
@@ -52,9 +86,7 @@ The MCP server can register itself! Just configure Claude Code without an API ke
 
 Then ask Claude: *"Register a new Lightning Wallet operator account"*
 
-Claude will use `register_operator` to create an account, then `set_operator_key` to activate it.
-
-### Option 2: Pre-configured API Key
+**Option B: Pre-configured API Key**
 
 1. Get an API key at [lightningfaucet.com/ai-agents](https://lightningfaucet.com/ai-agents/)
 2. Configure Claude Code (`~/.claude/settings.json`):
@@ -101,7 +133,6 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 | `create_invoice` | Generate invoice to receive payments |
 | `get_invoice_status` | Check if an invoice has been paid |
 | `get_transactions` | View transaction history |
-| `export_transactions` | Export transactions in JSON or CSV format |
 
 ### LNURL (Agent Key Required)
 
@@ -135,7 +166,6 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 | `delete_agent` | Permanently delete an agent (returns balance to operator) |
 | `get_budget_status` | Get agent's budget limit and spending |
 | `set_budget` | Set or update agent's spending limit |
-| `get_agent_analytics` | Get agent usage analytics (24h, 7d, 30d, all) |
 | `set_agent_credentials` | Switch to agent credentials |
 
 ### Webhooks
@@ -154,6 +184,52 @@ Claude will use `register_operator` to create an account, then `set_operator_key
 - `balance_low` - Balance dropped below threshold
 - `budget_warning` - 80% of budget consumed
 - `test` - Manual test event
+
+## CLI Reference
+
+All commands output JSON to stdout. Errors go to stderr with exit code 1.
+
+| Command | Description |
+|---------|-------------|
+| `lw register [--name "name"]` | Create operator account, prints API key |
+| `lw whoami` | Current identity (operator or agent) |
+| `lw balance` | Balance in satoshis |
+| `lw info` | Service status and capabilities |
+| `lw deposit <amount>` | Generate deposit invoice |
+| `lw withdraw <invoice>` | Withdraw to external wallet |
+| `lw pay <invoice>` | Pay BOLT11 invoice `[--max-fee <sats>]` |
+| `lw pay-api <url>` | Pay L402/X402 API `[--method GET] [--body "{}"] [--max-sats 1000]` |
+| `lw decode <invoice>` | Decode BOLT11 invoice |
+| `lw create-agent <name>` | Create agent `[--budget <sats>]` |
+| `lw fund-agent <id> <amount>` | Transfer sats to agent |
+| `lw list-agents` | List all agents |
+| `lw transactions` | Recent transactions `[--limit 10] [--offset 0]` |
+| `lw help` | Show all commands |
+
+### Agent Workflow Example (Bash)
+
+```bash
+# 1. Register (one-time)
+export LIGHTNING_WALLET_API_KEY=$(lw register --name "My Agent" | jq -r '.api_key')
+
+# 2. Fund the account (pay the invoice with any Lightning wallet)
+lw deposit 10000 | jq -r '.bolt11'
+
+# 3. Create an agent with a budget
+AGENT=$(lw create-agent "Worker" --budget 5000)
+AGENT_ID=$(echo $AGENT | jq -r '.agent_id')
+AGENT_KEY=$(echo $AGENT | jq -r '.agent_api_key')
+
+# 4. Fund the agent
+lw fund-agent $AGENT_ID 2000
+
+# 5. Switch to agent context and make payments
+export LIGHTNING_WALLET_API_KEY=$AGENT_KEY
+lw pay-api "https://api.example.com/data" --max-sats 100
+
+# 6. Check what happened
+lw transactions --limit 5
+```
 
 ## Paid API Protocols: L402 + X402
 
@@ -246,13 +322,6 @@ get_budget_status()
 // 10. Make payments!
 pay_l402_api({ url: "https://api.example.com/premium-data" })
 
-// 11. View analytics
-get_agent_analytics({ period: "7d" })
-// Returns: { total_spent: 500, total_received: 0, transaction_count: 5 }
-
-// 12. Export transactions
-export_transactions({ format: "csv" })
-// Returns: { format: "csv", count: 5, csv: "..." }
 ```
 
 ## Keysend Payments
@@ -360,24 +429,6 @@ Register a URL to receive payment notifications.
 
 **Returns:** Webhook ID and HMAC secret for signature verification.
 
-### get_agent_analytics
-
-Get usage analytics for an agent.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| period | string | No | Time period: "24h", "7d", "30d", or "all". Default: "30d" |
-
-### export_transactions
-
-Export transaction history.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| format | string | No | Export format: "json" or "csv". Default: "json" |
-| start_date | string | No | Start date filter (ISO 8601) |
-| end_date | string | No | End date filter (ISO 8601) |
-
 ## Architecture
 
 ```
@@ -407,7 +458,7 @@ Export transaction history.
 - **Set budget limits** - Protect against runaway spending
 - **Use agent keys for payments** - Keep operator key secure
 - **Verify webhook signatures** - Use the secret returned during registration
-- **Monitor transactions** - Use `get_transactions` and `get_agent_analytics`
+- **Monitor transactions** - Use `get_transactions` to review activity
 - **Recovery codes** - Store securely, needed if API key is lost
 - **Key rotation** - Rotate keys periodically using `rotate_api_key`
 
@@ -448,7 +499,10 @@ All payment responses include `platform_fee_sats`, `routing_fee_sats`, and `tota
 
 ## Changelog
 
-### v1.1.0 (2026-02-06)
+### v1.1.0 (2026-02-16)
+- **CLI interface:** New `lw` command for CLI-first agents (OpenClaw, Pi, KiloCode, any Bash agent)
+- **Same package, two interfaces:** `npm install -g lightning-wallet-mcp` gives you both MCP server and CLI
+- **JSON-first output:** All CLI commands output JSON to stdout, errors to stderr
 - **X402 support:** Automatic fallback to X402 (USDC on Base) when L402 is not available
 - **Protocol auto-detection:** `pay_l402_api` detects L402 or X402 from 402 response headers
 - **Response fields:** `payment_protocol` and `usdc_amount` included when X402 is used

@@ -1,12 +1,13 @@
 {
   "name": "lightning-wallet-mcp",
-  "version": "1.0.5",
+  "version": "1.2.3",
   "mcpName": "io.github.lightningfaucet/lightning-wallet-mcp",
-  "description": "MCP server for Lightning Wallet - enables AI agents to send and receive Bitcoin via Lightning Network",
+  "description": "Lightning wallet for AI agents. MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "lightning-wallet-mcp": "dist/index.js"
+    "lightning-wallet-mcp": "dist/index.js",
+    "lw": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -22,7 +23,10 @@
     "l402",
     "payments",
     "lightning-faucet-mcp",
-    "wallet"
+    "wallet",
+    "cli",
+    "openai",
+    "agent-framework"
   ],
   "author": "Lightning Faucet",
   "license": "MIT",

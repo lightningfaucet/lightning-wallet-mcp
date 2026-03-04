@@ -48,6 +48,7 @@ interface CreateInvoiceResponse extends ApiResponse {
   amount_sats?: number;
   memo?: string;
   expires_at?: string;
+  tip?: string;
 }
 
 interface InvoiceStatusResponse extends ApiResponse {
@@ -111,6 +112,9 @@ interface CreateAgentResponse extends ApiResponse {
 }
 
 interface FundAgentResponse extends ApiResponse {
+  operator_balance?: number;
+  agent_balance?: number;
+  transferred?: number;
   new_operator_balance?: number;
   new_agent_balance?: number;
   amount_transferred?: number;
@@ -364,15 +368,15 @@ export class LightningFaucetClient {
   ): Promise<{
     transactions: Array<{
       type: 'incoming' | 'outgoing';
-      amountSats: number;
-      feeSats?: number;
+      amount_sats: number;
+      fee_sats?: number;
       memo?: string;
-      paymentHash?: string;
+      payment_hash?: string;
       timestamp?: string;
-      balanceAfter?: number;
+      balance_after?: number;
     }>;
     total: number;
-    hasMore: boolean;
+    has_more: boolean;
     rawResponse: GetTransactionsResponse;
   }> {
     const result = await this.request<GetTransactionsResponse>('get_transactions', {
@@ -383,18 +387,18 @@ export class LightningFaucetClient {
     const transactions = (result.transactions || []).map(tx => ({
       type: (tx.type === 'deposit' || tx.type === 'incoming' || tx.amount_sats > 0
         ? 'incoming' : 'outgoing') as 'incoming' | 'outgoing',
-      amountSats: Math.abs(tx.amount_sats),
-      feeSats: tx.fee_sats,
+      amount_sats: Math.abs(tx.amount_sats),
+      fee_sats: tx.fee_sats,
       memo: tx.memo || tx.description,
-      paymentHash: tx.payment_hash,
+      payment_hash: tx.payment_hash,
       timestamp: tx.timestamp || tx.created_at || tx.settled_at,
-      balanceAfter: tx.balance_after,
+      balance_after: tx.balance_after,
     }));
 
     return {
       transactions,
       total: result.total || transactions.length,
-      hasMore: result.has_more || false,
+      has_more: result.has_more || false,
       rawResponse: result,
     };
   }
@@ -490,9 +494,9 @@ export class LightningFaucetClient {
     });
 
     return {
-      newOperatorBalance: result.new_operator_balance || 0,
-      newAgentBalance: result.new_agent_balance || 0,
-      amountTransferred: result.amount_transferred || amountSats,
+      newOperatorBalance: result.operator_balance || result.new_operator_balance || 0,
+      newAgentBalance: result.agent_balance || result.new_agent_balance || 0,
+      amountTransferred: result.transferred || result.amount_transferred || amountSats,
       rawResponse: result,
     };
   }
@@ -504,8 +508,8 @@ export class LightningFaucetClient {
     agents: Array<{
       id: number;
       name: string;
-      balanceSats: number;
-      isActive: boolean;
+      balance_sats: number;
+      is_active: boolean;
     }>;
     rawResponse: ListAgentsResponse;
   }> {
@@ -514,8 +518,8 @@ export class LightningFaucetClient {
     const agents = (result.agents || []).map(agent => ({
       id: agent.id,
       name: agent.name,
-      balanceSats: agent.balance_sats,
-      isActive: agent.is_active,
+      balance_sats: agent.balance_sats,
+      is_active: agent.is_active,
     }));
 
     return {
@@ -995,6 +999,50 @@ export class LightningFaucetClient {
   }
 
   /**
+   * Create an LNURL-withdraw link for the operator to receive funds.
+   * Opens in browser for QR code scanning with any Lightning wallet.
+   */
+  async createWithdrawLink(amountSats?: number): Promise<{
+    lnurl: string;
+    paymentUrl: string;
+    qrUrl: string;
+    amountSats: number;
+    platformFeeSats: number;
+    maxRoutingFeeSats: number;
+    totalDebitSats: number;
+    expiresAt: string;
+    rawResponse: ApiResponse;
+  }> {
+    const params: Record<string, unknown> = {};
+    if (amountSats !== undefined) {
+      params.amount_sats = amountSats;
+    }
+
+    const result = await this.request<ApiResponse & {
+      lnurl?: string;
+      payment_url?: string;
+      qr_url?: string;
+      amount_sats?: number;
+      platform_fee_sats?: number;
+      max_routing_fee_sats?: number;
+      total_debit_sats?: number;
+      expires_at?: string;
+    }>('create_withdraw_link', params);
+
+    return {
+      lnurl: result.lnurl || '',
+      paymentUrl: result.payment_url || '',
+      qrUrl: result.qr_url || '',
+      amountSats: result.amount_sats || 0,
+      platformFeeSats: result.platform_fee_sats || 0,
+      maxRoutingFeeSats: result.max_routing_fee_sats || 0,
+      totalDebitSats: result.total_debit_sats || 0,
+      expiresAt: result.expires_at || '',
+      rawResponse: result,
+    };
+  }
+
+  /**
    * Sweep funds from agent back to operator
    */
   async sweepAgent(agentId: number, amountSats: number): Promise<{
@@ -1010,6 +1058,7 @@ export class LightningFaucetClient {
     }>('withdraw_from_agent', {
       agent_id: agentId,
       amount_sats: amountSats,
+      sweep: true,
     });
 
     return {
@@ -1052,81 +1101,6 @@ export class LightningFaucetClient {
       feeSats: result.fee_sats || 0,
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
-      rawResponse: result,
-    };
-  }
-
-  /**
-   * Export transactions in specified format
-   */
-  async exportTransactions(
-    format: string = 'json',
-    startDate?: string,
-    endDate?: string,
-    includePending: boolean = false
-  ): Promise<{
-    format: string;
-    count: number;
-    data: unknown;
-    rawResponse: ApiResponse;
-  }> {
-    const data: Record<string, unknown> = {
-      format,
-      include_pending: includePending,
-    };
-    if (startDate) data.start_date = startDate;
-    if (endDate) data.end_date = endDate;
-
-    const result = await this.request<ApiResponse & {
-      format?: string;
-      count?: number;
-      data?: unknown;
-      csv?: string;
-      transactions?: unknown[];
-    }>('export_transactions', data);
-
-    return {
-      format: result.format || format,
-      count: result.count || (result.transactions?.length || 0),
-      data: format === 'csv' ? result.csv : (result.data || result.transactions),
-      rawResponse: result,
-    };
-  }
-
-  /**
-   * Get analytics for an agent
-   */
-  async getAgentAnalytics(agentId?: number, period: string = '30d'): Promise<{
-    agentId: number;
-    period: string;
-    totalSpent: number;
-    totalReceived: number;
-    transactionCount: number;
-    averagePayment: number;
-    topDestinations: Array<{ destination: string; count: number; total: number }>;
-    rawResponse: ApiResponse;
-  }> {
-    const data: Record<string, unknown> = { period };
-    if (agentId) data.agent_id = agentId;
-
-    const result = await this.request<ApiResponse & {
-      agent_id?: number;
-      period?: string;
-      total_spent?: number;
-      total_received?: number;
-      transaction_count?: number;
-      average_payment?: number;
-      top_destinations?: Array<{ destination: string; count: number; total: number }>;
-    }>('get_agent_analytics', data);
-
-    return {
-      agentId: result.agent_id || agentId || 0,
-      period: result.period || period,
-      totalSpent: result.total_spent || 0,
-      totalReceived: result.total_received || 0,
-      transactionCount: result.transaction_count || 0,
-      averagePayment: result.average_payment || 0,
-      topDestinations: result.top_destinations || [],
       rawResponse: result,
     };
   }
@@ -1294,18 +1268,170 @@ export class LightningFaucetClient {
       rawResponse: result,
     };
   }
+
+  // ==========================================
+  // NOSTR IDENTITY & ZAPS
+  // ==========================================
+
+  /**
+   * Set Nostr identity for the agent (generates keypair from private key)
+   */
+  async setNostrIdentity(privateKey: string): Promise<{
+    publicKey: string;
+    npub: string;
+    rawResponse: ApiResponse;
+  }> {
+    const result = await this.request<ApiResponse & {
+      public_key?: string;
+      npub?: string;
+    }>('set_nostr_identity', { private_key: privateKey });
+
+    return {
+      publicKey: result.public_key || '',
+      npub: result.npub || '',
+      rawResponse: result,
+    };
+  }
+
+  /**
+   * Get the agent's Nostr identity (public key only)
+   */
+  async getNostrIdentity(): Promise<{
+    publicKey: string;
+    npub: string;
+    hasIdentity: boolean;
+    rawResponse: ApiResponse;
+  }> {
+    const result = await this.request<ApiResponse & {
+      public_key?: string;
+      npub?: string;
+      has_identity?: boolean;
+    }>('get_nostr_identity');
+
+    return {
+      publicKey: result.public_key || '',
+      npub: result.npub || '',
+      hasIdentity: result.has_identity || !!result.public_key,
+      rawResponse: result,
+    };
+  }
+
+  /**
+   * Send a Nostr zap (NIP-57 Lightning payment with Nostr event)
+   * Falls back to regular Lightning address payment if recipient doesn't support NIP-57
+   */
+  async nostrZap(
+    address: string,
+    amountSats: number,
+    recipientPubkey?: string,
+    content?: string,
+    eventId?: string,
+    relays?: string[]
+  ): Promise<{
+    amountSats: number;
+    feeSats: number;
+    paymentHash: string;
+    newBalance: number;
+    zapType: 'nip57' | 'fallback';
+    rawResponse: ApiResponse;
+  }> {
+    const data: Record<string, unknown> = {
+      address,
+      amount_sats: amountSats,
+    };
+    if (recipientPubkey) data.recipient_pubkey = recipientPubkey;
+    if (content) data.content = content;
+    if (eventId) data.event_id = eventId;
+    if (relays) data.relays = relays;
+
+    const result = await this.request<ApiResponse & {
+      amount_sats?: number;
+      fee_sats?: number;
+      payment_hash?: string;
+      new_balance?: number;
+      zap_type?: 'nip57' | 'fallback';
+    }>('nostr_zap', data);
+
+    return {
+      amountSats: result.amount_sats || amountSats,
+      feeSats: result.fee_sats || 0,
+      paymentHash: result.payment_hash || '',
+      newBalance: result.new_balance || 0,
+      zapType: result.zap_type || 'fallback',
+      rawResponse: result,
+    };
+  }
+
+  // ==========================================
+  // MESSAGE BOARD METHODS
+  // ==========================================
+
+  /**
+   * Read board posts (public — no auth required, but works with auth too)
+   */
+  async boardRead(
+    sort: string = 'trending',
+    topic?: string,
+    limit: number = 20,
+    offset: number = 0
+  ): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { sort, limit, offset };
+    if (topic) data.topic = topic;
+    return this.request<ApiResponse & Record<string, unknown>>('board_read', data);
+  }
+
+  /**
+   * Post a message to the board
+   */
+  async boardPost(
+    content: string,
+    topic?: string
+  ): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { content };
+    if (topic) data.topic = topic;
+    return this.request<ApiResponse & Record<string, unknown>>('board_post', data);
+  }
+
+  /**
+   * Reply to an existing post
+   */
+  async boardReply(
+    postId: number,
+    content: string
+  ): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('board_reply', {
+      post_id: postId,
+      content,
+    });
+  }
+
+  /**
+   * Vote on a post
+   */
+  async boardVote(
+    postId: number,
+    direction: string
+  ): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('board_vote', {
+      post_id: postId,
+      direction,
+    });
+  }
 }
 
 // Static method for registration (no API key needed)
-export async function registerOperator(name?: string): Promise<{
+export async function registerOperator(name?: string, email?: string): Promise<{
   operatorId: number;
   apiKey: string;
   recoveryCode: string;
 }> {
-  const payload = {
+  const payload: Record<string, string> = {
     action: 'register',
     name: name || 'AI Agent Operator',
   };
+  if (email) {
+    payload.email = email;
+  }
 
   const response = await fetch(API_BASE_URL, {
     method: 'POST',

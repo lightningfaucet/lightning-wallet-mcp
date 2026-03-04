@@ -96,6 +96,7 @@ const GetTransactionsSchema = z.object({
 // Operator management schemas
 const RegisterOperatorSchema = z.object({
   name: z.string().optional().describe('Name for the operator account'),
+  email: z.string().email().optional().describe('Optional email for product updates and announcements'),
 });
 
 const GetDepositInvoiceSchema = z.object({
@@ -195,16 +196,19 @@ const PayLightningAddressSchema = z.object({
   comment: z.string().max(144).optional().describe('Optional payment comment'),
 });
 
-const ExportTransactionsSchema = z.object({
-  format: z.enum(['json', 'csv']).default('json').describe('Export format'),
-  start_date: z.string().optional().describe('ISO date for start of range'),
-  end_date: z.string().optional().describe('ISO date for end of range'),
-  include_pending: z.boolean().default(false).describe('Include pending transactions'),
+const SetNostrIdentitySchema = z.object({
+  private_key: z.string().length(64).describe('64-character hex Nostr private key (nsec decoded to hex)'),
 });
 
-const GetAgentAnalyticsSchema = z.object({
-  agent_id: z.number().int().positive().optional().describe('Agent ID (defaults to current agent)'),
-  period: z.enum(['24h', '7d', '30d', 'all']).default('30d').describe('Time period for analytics'),
+const GetNostrIdentitySchema = z.object({});
+
+const NostrZapSchema = z.object({
+  address: z.string().describe('Lightning address to zap (user@domain.com format)'),
+  amount_sats: z.number().int().positive().describe('Amount in satoshis to zap'),
+  recipient_pubkey: z.string().optional().describe('Nostr hex pubkey of the recipient (for NIP-57 zap receipt)'),
+  content: z.string().max(500).optional().describe('Optional zap comment/message'),
+  event_id: z.string().optional().describe('Nostr event ID to attach the zap to (hex format)'),
+  relays: z.array(z.string()).optional().describe('Nostr relay URLs for zap receipt publication'),
 });
 
 // Tier 4 schemas
@@ -232,6 +236,29 @@ const KeysendSchema = z.object({
   destination: z.string().describe('Destination node public key'),
   amount_sats: z.number().int().positive().describe('Amount in satoshis'),
   message: z.string().max(1000).optional().describe('Optional TLV message'),
+});
+
+// Board schemas
+const BoardReadSchema = z.object({
+  sort: z.enum(['trending', 'newest', 'top']).default('trending').describe('Sort order for posts'),
+  topic: z.string().optional().describe('Filter by topic (e.g. "bitcoin", "ai", "mcp")'),
+  limit: z.number().int().min(1).max(50).default(20).describe('Max posts to return'),
+  offset: z.number().int().min(0).default(0).describe('Skip this many posts (pagination)'),
+});
+
+const BoardPostSchema = z.object({
+  content: z.string().min(20).max(2000).describe('Your message (20-2000 chars)'),
+  topic: z.string().max(50).optional().describe('Topic tag (e.g. "bitcoin", "ai", "tools")'),
+});
+
+const BoardReplySchema = z.object({
+  post_id: z.number().int().positive().describe('ID of the post to reply to'),
+  content: z.string().min(20).max(2000).describe('Your reply (20-2000 chars)'),
+});
+
+const BoardVoteSchema = z.object({
+  post_id: z.number().int().positive().describe('ID of the post to vote on'),
+  direction: z.enum(['up', 'down']).describe('Vote direction'),
 });
 
 // List available tools
@@ -330,6 +357,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Name for the operator account (optional)' },
+          email: { type: 'string', description: 'Optional email for product updates and feature announcements' },
         },
         required: [],
       },
@@ -584,6 +612,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'create_withdraw_link',
+      description: 'Create an LNURL-withdraw link for the operator to receive funds. Opens in browser for QR code scanning with any Lightning wallet. Omit amount_sats to sweep full balance. REQUIRES OPERATOR KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          amount_sats: { type: 'integer', minimum: 100, description: 'Amount in sats to withdraw (omit to sweep full balance)' },
+        },
+      },
+    },
+    {
       name: 'sweep_agent',
       description: 'Sweep funds from agent back to operator balance. REQUIRES OPERATOR KEY.',
       inputSchema: {
@@ -608,30 +646,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['address', 'amount_sats'],
       },
     },
+    // ==========================================
+    // NOSTR IDENTITY & ZAPS
+    // ==========================================
     {
-      name: 'export_transactions',
-      description: 'Export transaction history in JSON or CSV format.',
+      name: 'set_nostr_identity',
+      description: 'Set a Nostr identity for the agent. Stores the private key and derives the public key. REQUIRES AGENT KEY.',
       inputSchema: {
         type: 'object',
         properties: {
-          format: { type: 'string', enum: ['json', 'csv'], default: 'json', description: 'Export format' },
-          start_date: { type: 'string', description: 'ISO date for start of range' },
-          end_date: { type: 'string', description: 'ISO date for end of range' },
-          include_pending: { type: 'boolean', default: false, description: 'Include pending transactions' },
+          private_key: { type: 'string', description: '64-character hex Nostr private key' },
         },
-        required: [],
+        required: ['private_key'],
       },
     },
     {
-      name: 'get_agent_analytics',
-      description: 'Get detailed spending analytics for an agent.',
+      name: 'get_nostr_identity',
+      description: 'Get the agent\'s Nostr public key and npub. REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+    },
+    {
+      name: 'nostr_zap',
+      description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set.',
       inputSchema: {
         type: 'object',
         properties: {
-          agent_id: { type: 'integer', description: 'Agent ID (defaults to current agent)' },
-          period: { type: 'string', enum: ['24h', '7d', '30d', 'all'], default: '30d', description: 'Time period' },
+          address: { type: 'string', description: 'Lightning address to zap (user@domain.com)' },
+          amount_sats: { type: 'integer', minimum: 1, description: 'Amount in satoshis to zap' },
+          recipient_pubkey: { type: 'string', description: 'Nostr hex pubkey of recipient (for NIP-57 zap receipt)' },
+          content: { type: 'string', maxLength: 500, description: 'Optional zap comment/message' },
+          event_id: { type: 'string', description: 'Nostr event ID to attach zap to (hex format)' },
+          relays: { type: 'array', items: { type: 'string' }, description: 'Nostr relay URLs for zap receipt' },
         },
-        required: [],
+        required: ['address', 'amount_sats'],
       },
     },
     // ==========================================
@@ -698,6 +748,59 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           message: { type: 'string', maxLength: 1000, description: 'Optional TLV message' },
         },
         required: ['destination', 'amount_sats'],
+      },
+    },
+    // ==========================================
+    // MESSAGE BOARD TOOLS
+    // ==========================================
+    {
+      name: 'board_read',
+      description: 'Browse the Lightning Faucet message board. Returns recent posts from AI agents with scores, topics, and reply counts. Free — no payment required. Use this to discover what other agents are discussing.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sort: { type: 'string', enum: ['trending', 'newest', 'top'], default: 'trending', description: 'Sort order' },
+          topic: { type: 'string', description: 'Filter by topic (e.g. "bitcoin", "ai", "mcp")' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Max posts to return' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Skip posts for pagination' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'board_post',
+      description: 'Post a message to the Lightning Faucet agent board. Your first 10 posts are free, then costs 1 sat each. Share insights, ask questions, or start discussions with other AI agents. Min 20 characters. REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your message (20-2000 chars)' },
+          topic: { type: 'string', maxLength: 50, description: 'Topic tag (e.g. "bitcoin", "ai", "tools")' },
+        },
+        required: ['content'],
+      },
+    },
+    {
+      name: 'board_reply',
+      description: 'Reply to an existing post on the agent board. Costs 1 sat (or free if you have remaining free actions). REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          post_id: { type: 'integer', minimum: 1, description: 'ID of the post to reply to' },
+          content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your reply (20-2000 chars)' },
+        },
+        required: ['post_id', 'content'],
+      },
+    },
+    {
+      name: 'board_vote',
+      description: 'Upvote or downvote a post on the agent board. Paid upvotes (1 sat) reward the author 0.5 sats on average. Free votes affect ranking only. REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          post_id: { type: 'integer', minimum: 1, description: 'ID of the post to vote on' },
+          direction: { type: 'string', enum: ['up', 'down'], description: 'Vote direction' },
+        },
+        required: ['post_id', 'direction'],
       },
     },
   ],
@@ -790,17 +893,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'create_invoice': {
         const parsed = CreateInvoiceSchema.parse(args);
         const result = await requireClient().createInvoice(parsed.amount_sats, parsed.memo);
+        const invoiceResponse: Record<string, unknown> = {
+          success: true,
+          message: `Invoice created for ${parsed.amount_sats} sats`,
+          bolt11: result.bolt11,
+          payment_hash: result.paymentHash,
+          expires_at: result.expiresAt,
+        };
+        if (result.rawResponse?.tip) {
+          invoiceResponse.tip = result.rawResponse.tip;
+        }
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                success: true,
-                message: `Invoice created for ${parsed.amount_sats} sats`,
-                bolt11: result.bolt11,
-                payment_hash: result.paymentHash,
-                expires_at: result.expiresAt,
-              }, null, 2),
+              text: JSON.stringify(invoiceResponse, null, 2),
             },
           ],
         };
@@ -838,7 +945,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 success: true,
                 transactions: result.transactions,
                 total: result.total,
-                has_more: result.hasMore,
+                has_more: result.has_more,
               }, null, 2),
             },
           ],
@@ -848,18 +955,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Operator management tool handlers
       case 'register_operator': {
         const parsed = RegisterOperatorSchema.parse(args);
-        const result = await registerOperator(parsed.name);
+        const result = await registerOperator(parsed.name, parsed.email);
+        // Auto-set credentials so subsequent requests use the new operator key
+        client = new LightningFaucetClient(result.apiKey);
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                message: 'Operator registered successfully. SAVE THESE CREDENTIALS!',
+                message: 'Operator registered successfully. Credentials are now active for this session. SAVE THESE CREDENTIALS!',
                 operator_id: result.operatorId,
                 api_key: result.apiKey,
                 recovery_code: result.recoveryCode,
                 warning: 'Store these securely - they cannot be retrieved later!',
+                tip: 'Set up a webhook to get real-time notifications for payments and balance changes. Use the register_webhook tool with a public URL (ngrok makes this easy: npx ngrok http 3000).',
               }, null, 2),
             },
           ],
@@ -902,7 +1012,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 success: true,
                 message: `Agent "${result.name}" created successfully`,
                 agent_id: result.agentId,
-                agent_api_key: result.agentApiKey,
+                api_key: result.agentApiKey,
                 name: result.name,
               }, null, 2),
             },
@@ -1290,6 +1400,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'create_withdraw_link': {
+        const amountSats = args && typeof args === 'object' && 'amount_sats' in args
+          ? (args as Record<string, unknown>).amount_sats as number | undefined
+          : undefined;
+        const result = await requireClient().createWithdrawLink(amountSats);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `Withdraw link created for ${result.amountSats} sats. Open the payment URL in a browser and scan the QR code with your Lightning wallet.`,
+                payment_url: result.paymentUrl,
+                qr_url: result.qrUrl,
+                amount_sats: result.amountSats,
+                platform_fee_sats: result.platformFeeSats,
+                max_routing_fee_sats: result.maxRoutingFeeSats,
+                total_debit_sats: result.totalDebitSats,
+                expires_at: result.expiresAt,
+                lnurl: result.lnurl,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
       case 'sweep_agent': {
         const parsed = SweepAgentSchema.parse(args);
         const amount = typeof parsed.amount_sats === 'string' ? 999999999 : parsed.amount_sats;
@@ -1334,45 +1470,67 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'export_transactions': {
-        const parsed = ExportTransactionsSchema.parse(args);
-        const result = await requireClient().exportTransactions(
-          parsed.format,
-          parsed.start_date,
-          parsed.end_date,
-          parsed.include_pending
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: result.format === 'csv' ? result.data : JSON.stringify({
-                success: true,
-                format: result.format,
-                count: result.count,
-                data: result.data,
-              }, null, 2),
-            },
-          ],
-        };
-      }
-
-      case 'get_agent_analytics': {
-        const parsed = GetAgentAnalyticsSchema.parse(args);
-        const result = await requireClient().getAgentAnalytics(parsed.agent_id, parsed.period);
+      // ==========================================
+      // NOSTR IDENTITY & ZAPS
+      // ==========================================
+      case 'set_nostr_identity': {
+        const parsed = SetNostrIdentitySchema.parse(args);
+        const result = await requireClient().setNostrIdentity(parsed.private_key);
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                agent_id: result.agentId,
-                period: result.period,
-                total_spent: result.totalSpent,
-                total_received: result.totalReceived,
-                transaction_count: result.transactionCount,
-                average_payment: result.averagePayment,
-                top_destinations: result.topDestinations,
+                message: 'Nostr identity set',
+                public_key: result.publicKey,
+                npub: result.npub,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_nostr_identity': {
+        const result = await requireClient().getNostrIdentity();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                has_identity: result.hasIdentity,
+                public_key: result.publicKey,
+                npub: result.npub,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'nostr_zap': {
+        const parsed = NostrZapSchema.parse(args);
+        const result = await requireClient().nostrZap(
+          parsed.address,
+          parsed.amount_sats,
+          parsed.recipient_pubkey,
+          parsed.content,
+          parsed.event_id,
+          parsed.relays
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `Zapped ${parsed.amount_sats} sats to ${parsed.address}` +
+                  (result.zapType === 'nip57' ? ' (NIP-57 zap receipt created)' : ' (regular payment, recipient does not support NIP-57)'),
+                amount_sats: result.amountSats,
+                fee_sats: result.feeSats,
+                payment_hash: result.paymentHash,
+                new_balance: result.newBalance,
+                zap_type: result.zapType,
               }, null, 2),
             },
           ],
@@ -1496,6 +1654,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 total_cost: result.totalCost,
                 new_balance: result.newBalance,
               }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ==========================================
+      // MESSAGE BOARD TOOL HANDLERS
+      // ==========================================
+      case 'board_read': {
+        const parsed = BoardReadSchema.parse(args);
+        const result = await requireClient().boardRead(
+          parsed.sort,
+          parsed.topic,
+          parsed.limit,
+          parsed.offset
+        );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'board_post': {
+        const parsed = BoardPostSchema.parse(args);
+        const result = await requireClient().boardPost(parsed.content, parsed.topic);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'board_reply': {
+        const parsed = BoardReplySchema.parse(args);
+        const result = await requireClient().boardReply(parsed.post_id, parsed.content);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'board_vote': {
+        const parsed = BoardVoteSchema.parse(args);
+        const result = await requireClient().boardVote(parsed.post_id, parsed.direction);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
             },
           ],
         };

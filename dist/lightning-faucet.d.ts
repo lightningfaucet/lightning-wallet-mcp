@@ -40,6 +40,7 @@ interface CreateInvoiceResponse extends ApiResponse {
     amount_sats?: number;
     memo?: string;
     expires_at?: string;
+    tip?: string;
 }
 interface InvoiceStatusResponse extends ApiResponse {
     status?: string;
@@ -89,6 +90,9 @@ interface CreateAgentResponse extends ApiResponse {
     message?: string;
 }
 interface FundAgentResponse extends ApiResponse {
+    operator_balance?: number;
+    agent_balance?: number;
+    transferred?: number;
     new_operator_balance?: number;
     new_agent_balance?: number;
     amount_transferred?: number;
@@ -179,15 +183,15 @@ export declare class LightningFaucetClient {
     getTransactions(limit?: number, offset?: number): Promise<{
         transactions: Array<{
             type: 'incoming' | 'outgoing';
-            amountSats: number;
-            feeSats?: number;
+            amount_sats: number;
+            fee_sats?: number;
             memo?: string;
-            paymentHash?: string;
+            payment_hash?: string;
             timestamp?: string;
-            balanceAfter?: number;
+            balance_after?: number;
         }>;
         total: number;
-        hasMore: boolean;
+        has_more: boolean;
         rawResponse: GetTransactionsResponse;
     }>;
     /**
@@ -226,8 +230,8 @@ export declare class LightningFaucetClient {
         agents: Array<{
             id: number;
             name: string;
-            balanceSats: number;
-            isActive: boolean;
+            balance_sats: number;
+            is_active: boolean;
         }>;
         rawResponse: ListAgentsResponse;
     }>;
@@ -384,6 +388,21 @@ export declare class LightningFaucetClient {
         rawResponse: ApiResponse;
     }>;
     /**
+     * Create an LNURL-withdraw link for the operator to receive funds.
+     * Opens in browser for QR code scanning with any Lightning wallet.
+     */
+    createWithdrawLink(amountSats?: number): Promise<{
+        lnurl: string;
+        paymentUrl: string;
+        qrUrl: string;
+        amountSats: number;
+        platformFeeSats: number;
+        maxRoutingFeeSats: number;
+        totalDebitSats: number;
+        expiresAt: string;
+        rawResponse: ApiResponse;
+    }>;
+    /**
      * Sweep funds from agent back to operator
      */
     sweepAgent(agentId: number, amountSats: number): Promise<{
@@ -400,32 +419,6 @@ export declare class LightningFaucetClient {
         feeSats: number;
         paymentHash: string;
         newBalance: number;
-        rawResponse: ApiResponse;
-    }>;
-    /**
-     * Export transactions in specified format
-     */
-    exportTransactions(format?: string, startDate?: string, endDate?: string, includePending?: boolean): Promise<{
-        format: string;
-        count: number;
-        data: unknown;
-        rawResponse: ApiResponse;
-    }>;
-    /**
-     * Get analytics for an agent
-     */
-    getAgentAnalytics(agentId?: number, period?: string): Promise<{
-        agentId: number;
-        period: string;
-        totalSpent: number;
-        totalReceived: number;
-        transactionCount: number;
-        averagePayment: number;
-        topDestinations: Array<{
-            destination: string;
-            count: number;
-            total: number;
-        }>;
         rawResponse: ApiResponse;
     }>;
     /**
@@ -475,8 +468,53 @@ export declare class LightningFaucetClient {
         newBalance: number;
         rawResponse: ApiResponse;
     }>;
+    /**
+     * Set Nostr identity for the agent (generates keypair from private key)
+     */
+    setNostrIdentity(privateKey: string): Promise<{
+        publicKey: string;
+        npub: string;
+        rawResponse: ApiResponse;
+    }>;
+    /**
+     * Get the agent's Nostr identity (public key only)
+     */
+    getNostrIdentity(): Promise<{
+        publicKey: string;
+        npub: string;
+        hasIdentity: boolean;
+        rawResponse: ApiResponse;
+    }>;
+    /**
+     * Send a Nostr zap (NIP-57 Lightning payment with Nostr event)
+     * Falls back to regular Lightning address payment if recipient doesn't support NIP-57
+     */
+    nostrZap(address: string, amountSats: number, recipientPubkey?: string, content?: string, eventId?: string, relays?: string[]): Promise<{
+        amountSats: number;
+        feeSats: number;
+        paymentHash: string;
+        newBalance: number;
+        zapType: 'nip57' | 'fallback';
+        rawResponse: ApiResponse;
+    }>;
+    /**
+     * Read board posts (public — no auth required, but works with auth too)
+     */
+    boardRead(sort?: string, topic?: string, limit?: number, offset?: number): Promise<Record<string, unknown>>;
+    /**
+     * Post a message to the board
+     */
+    boardPost(content: string, topic?: string): Promise<Record<string, unknown>>;
+    /**
+     * Reply to an existing post
+     */
+    boardReply(postId: number, content: string): Promise<Record<string, unknown>>;
+    /**
+     * Vote on a post
+     */
+    boardVote(postId: number, direction: string): Promise<Record<string, unknown>>;
 }
-export declare function registerOperator(name?: string): Promise<{
+export declare function registerOperator(name?: string, email?: string): Promise<{
     operatorId: number;
     apiKey: string;
     recoveryCode: string;

@@ -163,17 +163,17 @@ class LightningFaucetClient {
         const transactions = (result.transactions || []).map(tx => ({
             type: (tx.type === 'deposit' || tx.type === 'incoming' || tx.amount_sats > 0
                 ? 'incoming' : 'outgoing'),
-            amountSats: Math.abs(tx.amount_sats),
-            feeSats: tx.fee_sats,
+            amount_sats: Math.abs(tx.amount_sats),
+            fee_sats: tx.fee_sats,
             memo: tx.memo || tx.description,
-            paymentHash: tx.payment_hash,
+            payment_hash: tx.payment_hash,
             timestamp: tx.timestamp || tx.created_at || tx.settled_at,
-            balanceAfter: tx.balance_after,
+            balance_after: tx.balance_after,
         }));
         return {
             transactions,
             total: result.total || transactions.length,
-            hasMore: result.has_more || false,
+            has_more: result.has_more || false,
             rawResponse: result,
         };
     }
@@ -236,9 +236,9 @@ class LightningFaucetClient {
             amount_sats: amountSats,
         });
         return {
-            newOperatorBalance: result.new_operator_balance || 0,
-            newAgentBalance: result.new_agent_balance || 0,
-            amountTransferred: result.amount_transferred || amountSats,
+            newOperatorBalance: result.operator_balance || result.new_operator_balance || 0,
+            newAgentBalance: result.agent_balance || result.new_agent_balance || 0,
+            amountTransferred: result.transferred || result.amount_transferred || amountSats,
             rawResponse: result,
         };
     }
@@ -250,8 +250,8 @@ class LightningFaucetClient {
         const agents = (result.agents || []).map(agent => ({
             id: agent.id,
             name: agent.name,
-            balanceSats: agent.balance_sats,
-            isActive: agent.is_active,
+            balance_sats: agent.balance_sats,
+            is_active: agent.is_active,
         }));
         return {
             agents,
@@ -530,12 +530,35 @@ class LightningFaucetClient {
         };
     }
     /**
+     * Create an LNURL-withdraw link for the operator to receive funds.
+     * Opens in browser for QR code scanning with any Lightning wallet.
+     */
+    async createWithdrawLink(amountSats) {
+        const params = {};
+        if (amountSats !== undefined) {
+            params.amount_sats = amountSats;
+        }
+        const result = await this.request('create_withdraw_link', params);
+        return {
+            lnurl: result.lnurl || '',
+            paymentUrl: result.payment_url || '',
+            qrUrl: result.qr_url || '',
+            amountSats: result.amount_sats || 0,
+            platformFeeSats: result.platform_fee_sats || 0,
+            maxRoutingFeeSats: result.max_routing_fee_sats || 0,
+            totalDebitSats: result.total_debit_sats || 0,
+            expiresAt: result.expires_at || '',
+            rawResponse: result,
+        };
+    }
+    /**
      * Sweep funds from agent back to operator
      */
     async sweepAgent(agentId, amountSats) {
         const result = await this.request('withdraw_from_agent', {
             agent_id: agentId,
             amount_sats: amountSats,
+            sweep: true,
         });
         return {
             amountTransferred: result.amount_transferred || amountSats,
@@ -560,45 +583,6 @@ class LightningFaucetClient {
             feeSats: result.fee_sats || 0,
             paymentHash: result.payment_hash || '',
             newBalance: result.new_balance || 0,
-            rawResponse: result,
-        };
-    }
-    /**
-     * Export transactions in specified format
-     */
-    async exportTransactions(format = 'json', startDate, endDate, includePending = false) {
-        const data = {
-            format,
-            include_pending: includePending,
-        };
-        if (startDate)
-            data.start_date = startDate;
-        if (endDate)
-            data.end_date = endDate;
-        const result = await this.request('export_transactions', data);
-        return {
-            format: result.format || format,
-            count: result.count || (result.transactions?.length || 0),
-            data: format === 'csv' ? result.csv : (result.data || result.transactions),
-            rawResponse: result,
-        };
-    }
-    /**
-     * Get analytics for an agent
-     */
-    async getAgentAnalytics(agentId, period = '30d') {
-        const data = { period };
-        if (agentId)
-            data.agent_id = agentId;
-        const result = await this.request('get_agent_analytics', data);
-        return {
-            agentId: result.agent_id || agentId || 0,
-            period: result.period || period,
-            totalSpent: result.total_spent || 0,
-            totalReceived: result.total_received || 0,
-            transactionCount: result.transaction_count || 0,
-            averagePayment: result.average_payment || 0,
-            topDestinations: result.top_destinations || [],
             rawResponse: result,
         };
     }
@@ -697,14 +681,109 @@ class LightningFaucetClient {
             rawResponse: result,
         };
     }
+    // ==========================================
+    // NOSTR IDENTITY & ZAPS
+    // ==========================================
+    /**
+     * Set Nostr identity for the agent (generates keypair from private key)
+     */
+    async setNostrIdentity(privateKey) {
+        const result = await this.request('set_nostr_identity', { private_key: privateKey });
+        return {
+            publicKey: result.public_key || '',
+            npub: result.npub || '',
+            rawResponse: result,
+        };
+    }
+    /**
+     * Get the agent's Nostr identity (public key only)
+     */
+    async getNostrIdentity() {
+        const result = await this.request('get_nostr_identity');
+        return {
+            publicKey: result.public_key || '',
+            npub: result.npub || '',
+            hasIdentity: result.has_identity || !!result.public_key,
+            rawResponse: result,
+        };
+    }
+    /**
+     * Send a Nostr zap (NIP-57 Lightning payment with Nostr event)
+     * Falls back to regular Lightning address payment if recipient doesn't support NIP-57
+     */
+    async nostrZap(address, amountSats, recipientPubkey, content, eventId, relays) {
+        const data = {
+            address,
+            amount_sats: amountSats,
+        };
+        if (recipientPubkey)
+            data.recipient_pubkey = recipientPubkey;
+        if (content)
+            data.content = content;
+        if (eventId)
+            data.event_id = eventId;
+        if (relays)
+            data.relays = relays;
+        const result = await this.request('nostr_zap', data);
+        return {
+            amountSats: result.amount_sats || amountSats,
+            feeSats: result.fee_sats || 0,
+            paymentHash: result.payment_hash || '',
+            newBalance: result.new_balance || 0,
+            zapType: result.zap_type || 'fallback',
+            rawResponse: result,
+        };
+    }
+    // ==========================================
+    // MESSAGE BOARD METHODS
+    // ==========================================
+    /**
+     * Read board posts (public — no auth required, but works with auth too)
+     */
+    async boardRead(sort = 'trending', topic, limit = 20, offset = 0) {
+        const data = { sort, limit, offset };
+        if (topic)
+            data.topic = topic;
+        return this.request('board_read', data);
+    }
+    /**
+     * Post a message to the board
+     */
+    async boardPost(content, topic) {
+        const data = { content };
+        if (topic)
+            data.topic = topic;
+        return this.request('board_post', data);
+    }
+    /**
+     * Reply to an existing post
+     */
+    async boardReply(postId, content) {
+        return this.request('board_reply', {
+            post_id: postId,
+            content,
+        });
+    }
+    /**
+     * Vote on a post
+     */
+    async boardVote(postId, direction) {
+        return this.request('board_vote', {
+            post_id: postId,
+            direction,
+        });
+    }
 }
 exports.LightningFaucetClient = LightningFaucetClient;
 // Static method for registration (no API key needed)
-async function registerOperator(name) {
+async function registerOperator(name, email) {
     const payload = {
         action: 'register',
         name: name || 'AI Agent Operator',
     };
+    if (email) {
+        payload.email = email;
+    }
     const response = await fetch(API_BASE_URL, {
         method: 'POST',
         headers: {
