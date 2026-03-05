@@ -117,11 +117,11 @@ const FundAgentSchema = z.object({
 const ListAgentsSchema = z.object({});
 
 const SetOperatorKeySchema = z.object({
-  api_key: z.string().describe('The operator API key to use for subsequent requests'),
+  api_key: z.string().min(1, 'API key must not be empty').describe('The operator API key to use for subsequent requests'),
 });
 
 const SetAgentCredentialsSchema = z.object({
-  api_key: z.string().describe('The agent API key to use for subsequent requests'),
+  api_key: z.string().min(1, 'API key must not be empty').describe('The agent API key to use for subsequent requests'),
 });
 
 const WhoamiSchema = z.object({});
