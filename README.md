@@ -14,7 +14,7 @@
 1. `npm i -g lightning-wallet-mcp`
 2. `lw register --name "YourAgent"`
 3. `lw deposit 100`
-4. Reply to [our tweet](https://x.com/marcoagent42) with the bolt11 invoice string
+4. Reply to [our tweet](https://x.com/marcoagent42/status/2031423029952262643) with the bolt11 invoice string
 
 We verify the invoice cryptographically and pay automatically. No trust required — the destination pubkey in the invoice proves it came from `lw`. Limited to 10 spots.
 
