@@ -520,4 +520,3 @@ export declare function registerOperator(name?: string, email?: string): Promise
     recoveryCode: string;
 }>;
 export {};
-//# sourceMappingURL=lightning-faucet.d.ts.map

@@ -13,4 +13,3 @@
  *   and set LIGHTNING_WALLET_API_KEY in the env block.
  */
 export {};
-//# sourceMappingURL=index.d.ts.map

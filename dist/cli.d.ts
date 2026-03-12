@@ -8,4 +8,3 @@
  * Usage: lw <command> [options]
  */
 export {};
-//# sourceMappingURL=cli.d.ts.map
