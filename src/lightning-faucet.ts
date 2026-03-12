@@ -4,7 +4,7 @@
  * Handles communication with the Lightning Faucet AI Agent Wallet API.
  */
 
-const API_BASE_URL = 'https://lightningfaucet.com/ai-agents/api';
+const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
 
 // Response interfaces
 interface ApiResponse {
@@ -174,7 +174,8 @@ export class LightningFaucetClient {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+      // Don't include statusText in error — it may expose server internals
+      throw new Error(`Request failed (HTTP ${response.status})`);
     }
 
     const result = await response.json() as T;
@@ -806,7 +807,7 @@ export class LightningFaucetClient {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
+      throw new Error(`Request failed (HTTP ${response.status})`);
     }
 
     const result = await response.json() as ApiResponse & {
@@ -1442,7 +1443,7 @@ export async function registerOperator(name?: string, email?: string): Promise<{
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error: ${response.status}`);
+    throw new Error(`Request failed (HTTP ${response.status})`);
   }
 
   const result = await response.json() as RegisterResponse;

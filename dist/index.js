@@ -10,18 +10,8 @@
  *   Get an API key at: https://lightningfaucet.com/ai-agents/
  *
  * Usage with Claude Code:
- *   Add to .claude/settings.json:
- *   {
- *     "mcpServers": {
- *       "lightning-wallet": {
- *         "command": "npx",
- *         "args": ["lightning-wallet-mcp"],
- *         "env": {
- *           "LIGHTNING_WALLET_API_KEY": "your-api-key-here"
- *         }
- *       }
- *     }
- *   }
+ *   Add to .claude/settings.json mcpServers with command "npx lightning-wallet-mcp"
+ *   and set LIGHTNING_WALLET_API_KEY in the env block.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
@@ -29,19 +19,52 @@ const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const zod_1 = require("zod");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
-// Get API key from environment (optional - can be set later via set_operator_key or set_agent_credentials)
-// Supports both new and legacy env var names for backwards compatibility
-const API_KEY = process.env.LIGHTNING_WALLET_API_KEY || process.env.LIGHTNING_FAUCET_API_KEY;
-// Global client instance for the current session
-// NOTE: This is intentionally global as MCP tools are invoked sequentially by the model.
-// If concurrent tool execution becomes supported, this would need to be refactored
-// to use per-request context or a connection pool.
-let client = API_KEY ? new lightning_faucet_js_1.LightningFaucetClient(API_KEY) : null;
-function requireClient() {
-    if (!client) {
-        throw new Error('No API key configured. Use set_operator_key or set_agent_credentials first, or set LIGHTNING_WALLET_API_KEY environment variable.');
+/**
+ * Session state manager for the MCP server.
+ *
+ * MCP sessions are single-client by design: one transport, one model, sequential
+ * tool calls. A single client instance per session is the correct pattern here —
+ * there is no concurrent access. The client can be swapped via set_operator_key
+ * or set_agent_credentials tools when the model needs to switch contexts.
+ */
+class SessionState {
+    client = null;
+    constructor() {
+        const apiKey = process.env.LIGHTNING_WALLET_API_KEY;
+        if (apiKey) {
+            this.client = new lightning_faucet_js_1.LightningFaucetClient(apiKey);
+        }
     }
-    return client;
+    getClient() {
+        return this.client;
+    }
+    setClient(c) {
+        this.client = c;
+    }
+    requireClient() {
+        if (!this.client) {
+            throw new Error('No API key configured. Use set_operator_key or set_agent_credentials first, or set LIGHTNING_WALLET_API_KEY environment variable.');
+        }
+        return this.client;
+    }
+}
+const session = new SessionState();
+/**
+ * Sanitize error messages before returning them to the client.
+ * Strips internal details like HTTP status lines, server paths, and stack traces.
+ */
+function sanitizeErrorMessage(message) {
+    // Strip HTTP status code prefixes (e.g., "HTTP error: 500 Internal Server Error")
+    message = message.replace(/^HTTP error:\s*\d{3}\s*/i, '');
+    // Strip file paths
+    message = message.replace(/\/[^\s:]+\.(js|ts|php|py)\b/g, '[internal]');
+    // Strip stack traces
+    message = message.replace(/\s+at\s+.+/g, '');
+    // Truncate overly long messages (backend may dump verbose errors)
+    if (message.length > 300) {
+        message = message.substring(0, 300) + '...';
+    }
+    return message.trim() || 'An error occurred';
 }
 // Create MCP server
 const server = new index_js_1.Server({
@@ -62,12 +85,13 @@ const PayL402ApiSchema = zod_1.z.object({
         .describe('Maximum amount in satoshis to pay for this request'),
 });
 const PayInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().describe('BOLT11 invoice string to pay (starts with lnbc...)'),
+    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+        .describe('BOLT11 invoice string to pay (starts with lnbc...)'),
     max_fee_sats: zod_1.z.number().min(0).optional()
         .describe('Maximum routing fee in satoshis (default: 10% of invoice amount)'),
 });
 const CreateInvoiceSchema = zod_1.z.object({
-    amount_sats: zod_1.z.number().min(1).describe('Amount in satoshis to request'),
+    amount_sats: zod_1.z.number().int().min(1).max(10_000_000).describe('Amount in satoshis to request'),
     memo: zod_1.z.string().max(640).optional().describe('Description/memo for the invoice'),
 });
 const GetInvoiceStatusSchema = zod_1.z.object({
@@ -83,7 +107,7 @@ const RegisterOperatorSchema = zod_1.z.object({
     email: zod_1.z.string().email().optional().describe('Optional email for product updates and announcements'),
 });
 const GetDepositInvoiceSchema = zod_1.z.object({
-    amount_sats: zod_1.z.number().min(100).describe('Amount in satoshis to deposit'),
+    amount_sats: zod_1.z.number().int().min(100).max(10_000_000).describe('Amount in satoshis to deposit'),
 });
 const CreateAgentSchema = zod_1.z.object({
     name: zod_1.z.string().describe('Name for the agent'),
@@ -91,15 +115,17 @@ const CreateAgentSchema = zod_1.z.object({
     budget_limit_sats: zod_1.z.number().min(0).optional().describe('Optional spending limit in sats'),
 });
 const FundAgentSchema = zod_1.z.object({
-    agent_id: zod_1.z.number().describe('ID of the agent to fund'),
-    amount_sats: zod_1.z.number().min(1).describe('Amount in satoshis to transfer'),
+    agent_id: zod_1.z.number().int().positive().describe('ID of the agent to fund'),
+    amount_sats: zod_1.z.number().int().min(1).max(10_000_000).describe('Amount in satoshis to transfer'),
 });
 const ListAgentsSchema = zod_1.z.object({});
 const SetOperatorKeySchema = zod_1.z.object({
-    api_key: zod_1.z.string().min(1, 'API key must not be empty').describe('The operator API key to use for subsequent requests'),
+    api_key: zod_1.z.string().min(10, 'API key is too short').max(200, 'API key is too long')
+        .describe('The operator API key to use for subsequent requests'),
 });
 const SetAgentCredentialsSchema = zod_1.z.object({
-    api_key: zod_1.z.string().min(1, 'API key must not be empty').describe('The agent API key to use for subsequent requests'),
+    api_key: zod_1.z.string().min(10, 'API key is too short').max(200, 'API key is too long')
+        .describe('The agent API key to use for subsequent requests'),
 });
 const WhoamiSchema = zod_1.z.object({});
 // ==========================================
@@ -131,7 +157,8 @@ const ReactivateAgentSchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().describe('Agent ID to reactivate'),
 });
 const RecoverAccountSchema = zod_1.z.object({
-    recovery_code: zod_1.z.string().describe('Recovery code received during registration'),
+    recovery_code: zod_1.z.string().min(16, 'Recovery code is too short').max(64, 'Recovery code is too long')
+        .describe('Recovery code received during registration'),
 });
 const RotateApiKeySchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().optional().describe('Agent ID (operators only). If omitted, rotates operator key.'),
@@ -139,20 +166,23 @@ const RotateApiKeySchema = zod_1.z.object({
 // Tier 2 schemas
 const GetInfoSchema = zod_1.z.object({});
 const DecodeInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().describe('BOLT11 invoice string to decode'),
+    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+        .describe('BOLT11 invoice string to decode'),
 });
 const GetRateLimitsSchema = zod_1.z.object({});
 // Tier 3 schemas
 const WithdrawSchema = zod_1.z.object({
-    invoice: zod_1.z.string().describe('BOLT11 invoice to pay out to'),
+    invoice: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+        .describe('BOLT11 invoice to pay out to'),
 });
 const SweepAgentSchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().describe('Agent ID to sweep funds from'),
     amount_sats: zod_1.z.union([zod_1.z.number().int().positive(), zod_1.z.literal('all')]).describe('Amount in sats or "all" for full balance'),
 });
 const PayLightningAddressSchema = zod_1.z.object({
-    address: zod_1.z.string().describe('Lightning address (user@domain.com format)'),
-    amount_sats: zod_1.z.number().int().positive().describe('Amount in satoshis to send'),
+    address: zod_1.z.string().regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Invalid Lightning address format (expected user@domain)')
+        .describe('Lightning address (user@domain.com format)'),
+    amount_sats: zod_1.z.number().int().positive().max(10_000_000).describe('Amount in satoshis to send'),
     comment: zod_1.z.string().max(144).optional().describe('Optional payment comment'),
 });
 const SetNostrIdentitySchema = zod_1.z.object({
@@ -160,12 +190,15 @@ const SetNostrIdentitySchema = zod_1.z.object({
 });
 const GetNostrIdentitySchema = zod_1.z.object({});
 const NostrZapSchema = zod_1.z.object({
-    address: zod_1.z.string().describe('Lightning address to zap (user@domain.com format)'),
+    address: zod_1.z.string().regex(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Invalid Lightning address format')
+        .describe('Lightning address to zap (user@domain.com format)'),
     amount_sats: zod_1.z.number().int().positive().describe('Amount in satoshis to zap'),
-    recipient_pubkey: zod_1.z.string().optional().describe('Nostr hex pubkey of the recipient (for NIP-57 zap receipt)'),
+    recipient_pubkey: zod_1.z.string().regex(/^[0-9a-f]{64}$/, 'Must be 64-character hex pubkey').optional()
+        .describe('Nostr hex pubkey of the recipient (for NIP-57 zap receipt)'),
     content: zod_1.z.string().max(500).optional().describe('Optional zap comment/message'),
-    event_id: zod_1.z.string().optional().describe('Nostr event ID to attach the zap to (hex format)'),
-    relays: zod_1.z.array(zod_1.z.string()).optional().describe('Nostr relay URLs for zap receipt publication'),
+    event_id: zod_1.z.string().regex(/^[0-9a-f]{64}$/, 'Must be 64-character hex event ID').optional()
+        .describe('Nostr event ID to attach the zap to (hex format)'),
+    relays: zod_1.z.array(zod_1.z.string().url()).optional().describe('Nostr relay URLs for zap receipt publication'),
 });
 // Tier 4 schemas
 const TransferToAgentSchema = zod_1.z.object({
@@ -179,13 +212,14 @@ const DeleteAgentSchema = zod_1.z.object({
 });
 // Tier 5 schemas
 const LnurlAuthSchema = zod_1.z.object({
-    lnurl: zod_1.z.string().describe('LNURL-auth string to authenticate with'),
+    lnurl: zod_1.z.string().min(1, 'LNURL string is required').describe('LNURL-auth string to authenticate with'),
 });
 const ClaimLnurlWithdrawSchema = zod_1.z.object({
-    lnurl: zod_1.z.string().describe('LNURL-withdraw string to claim from'),
+    lnurl: zod_1.z.string().min(1, 'LNURL string is required').describe('LNURL-withdraw string to claim from'),
 });
 const KeysendSchema = zod_1.z.object({
-    destination: zod_1.z.string().describe('Destination node public key'),
+    destination: zod_1.z.string().regex(/^[0-9a-f]{66}$/, 'Must be 66-character hex public key')
+        .describe('Destination node public key'),
     amount_sats: zod_1.z.number().int().positive().describe('Amount in satoshis'),
     message: zod_1.z.string().max(1000).optional().describe('Optional TLV message'),
 });
@@ -759,7 +793,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
         switch (name) {
             case 'check_balance': {
                 CheckBalanceSchema.parse(args);
-                const result = await requireClient().checkBalance();
+                const result = await session.requireClient().checkBalance();
                 return {
                     content: [
                         {
@@ -775,7 +809,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'pay_l402_api': {
                 const parsed = PayL402ApiSchema.parse(args);
-                const result = await requireClient().l402Pay(parsed.url, parsed.method, parsed.body, parsed.max_payment_sats);
+                const result = await session.requireClient().l402Pay(parsed.url, parsed.method, parsed.body, parsed.max_payment_sats);
                 // Determine if the target returned a success response
                 const targetSuccess = result.statusCode >= 200 && result.statusCode < 300;
                 const message = targetSuccess
@@ -807,7 +841,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'pay_invoice': {
                 const parsed = PayInvoiceSchema.parse(args);
-                const result = await requireClient().payInvoice(parsed.bolt11, parsed.max_fee_sats);
+                const result = await session.requireClient().payInvoice(parsed.bolt11, parsed.max_fee_sats);
                 return {
                     content: [
                         {
@@ -829,7 +863,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'create_invoice': {
                 const parsed = CreateInvoiceSchema.parse(args);
-                const result = await requireClient().createInvoice(parsed.amount_sats, parsed.memo);
+                const result = await session.requireClient().createInvoice(parsed.amount_sats, parsed.memo);
                 const invoiceResponse = {
                     success: true,
                     message: `Invoice created for ${parsed.amount_sats} sats`,
@@ -851,7 +885,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'get_invoice_status': {
                 const parsed = GetInvoiceStatusSchema.parse(args);
-                const result = await requireClient().getInvoiceStatus(parsed.payment_hash);
+                const result = await session.requireClient().getInvoiceStatus(parsed.payment_hash);
                 return {
                     content: [
                         {
@@ -871,7 +905,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'get_transactions': {
                 const parsed = GetTransactionsSchema.parse(args);
-                const result = await requireClient().getTransactions(parsed.limit, parsed.offset);
+                const result = await session.requireClient().getTransactions(parsed.limit, parsed.offset);
                 return {
                     content: [
                         {
@@ -891,7 +925,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const parsed = RegisterOperatorSchema.parse(args);
                 const result = await (0, lightning_faucet_js_1.registerOperator)(parsed.name, parsed.email);
                 // Auto-set credentials so subsequent requests use the new operator key
-                client = new lightning_faucet_js_1.LightningFaucetClient(result.apiKey);
+                session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
                 return {
                     content: [
                         {
@@ -911,7 +945,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'get_deposit_invoice': {
                 const parsed = GetDepositInvoiceSchema.parse(args);
-                const result = await requireClient().getDepositInvoice(parsed.amount_sats);
+                const result = await session.requireClient().getDepositInvoice(parsed.amount_sats);
                 return {
                     content: [
                         {
@@ -931,7 +965,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'create_agent': {
                 const parsed = CreateAgentSchema.parse(args);
-                const result = await requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
+                const result = await session.requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
                 return {
                     content: [
                         {
@@ -949,7 +983,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'fund_agent': {
                 const parsed = FundAgentSchema.parse(args);
-                const result = await requireClient().fundAgent(parsed.agent_id, parsed.amount_sats);
+                const result = await session.requireClient().fundAgent(parsed.agent_id, parsed.amount_sats);
                 return {
                     content: [
                         {
@@ -967,7 +1001,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'list_agents': {
                 ListAgentsSchema.parse(args);
-                const result = await requireClient().listAgents();
+                const result = await session.requireClient().listAgents();
                 return {
                     content: [
                         {
@@ -983,7 +1017,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'set_operator_key': {
                 const parsed = SetOperatorKeySchema.parse(args);
-                client = new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key);
+                session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 return {
                     content: [
                         {
@@ -998,7 +1032,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'set_agent_credentials': {
                 const parsed = SetAgentCredentialsSchema.parse(args);
-                client = new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key);
+                session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 return {
                     content: [
                         {
@@ -1013,7 +1047,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'whoami': {
                 WhoamiSchema.parse(args);
-                const result = await requireClient().whoami();
+                const result = await session.requireClient().whoami();
                 const response = {
                     success: true,
                     type: result.type,
@@ -1042,7 +1076,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'register_webhook': {
                 const parsed = RegisterWebhookSchema.parse(args);
-                const result = await requireClient().registerWebhook(parsed.url, parsed.events);
+                const result = await session.requireClient().registerWebhook(parsed.url, parsed.events);
                 return {
                     content: [
                         {
@@ -1061,7 +1095,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'list_webhooks': {
                 ListWebhooksSchema.parse(args);
-                const result = await requireClient().listWebhooks();
+                const result = await session.requireClient().listWebhooks();
                 return {
                     content: [
                         {
@@ -1077,7 +1111,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'delete_webhook': {
                 const parsed = DeleteWebhookSchema.parse(args);
-                const result = await requireClient().deleteWebhook(parsed.webhook_id);
+                const result = await session.requireClient().deleteWebhook(parsed.webhook_id);
                 return {
                     content: [
                         {
@@ -1092,7 +1126,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'test_webhook': {
                 const parsed = TestWebhookSchema.parse(args);
-                const result = await requireClient().testWebhook(parsed.webhook_id);
+                const result = await session.requireClient().testWebhook(parsed.webhook_id);
                 return {
                     content: [
                         {
@@ -1111,7 +1145,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'get_budget_status': {
                 const parsed = GetBudgetStatusSchema.parse(args);
-                const result = await requireClient().getBudgetStatus(parsed.agent_id);
+                const result = await session.requireClient().getBudgetStatus(parsed.agent_id);
                 return {
                     content: [
                         {
@@ -1130,7 +1164,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'set_budget': {
                 const parsed = SetBudgetSchema.parse(args);
-                const result = await requireClient().setBudget(parsed.agent_id, parsed.budget_limit_sats);
+                const result = await session.requireClient().setBudget(parsed.agent_id, parsed.budget_limit_sats);
                 return {
                     content: [
                         {
@@ -1150,7 +1184,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'deactivate_agent': {
                 const parsed = DeactivateAgentSchema.parse(args);
-                const result = await requireClient().deactivateAgent(parsed.agent_id);
+                const result = await session.requireClient().deactivateAgent(parsed.agent_id);
                 return {
                     content: [
                         {
@@ -1166,7 +1200,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'reactivate_agent': {
                 const parsed = ReactivateAgentSchema.parse(args);
-                const result = await requireClient().reactivateAgent(parsed.agent_id);
+                const result = await session.requireClient().reactivateAgent(parsed.agent_id);
                 return {
                     content: [
                         {
@@ -1185,11 +1219,11 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'recover_account': {
                 const parsed = RecoverAccountSchema.parse(args);
-                // Recovery doesn't need an existing API key - create temp client or use existing
-                const tempClient = client || new lightning_faucet_js_1.LightningFaucetClient('');
+                // Recovery doesn't need an existing API key — recoverAccount() uses its own fetch
+                const tempClient = session.getClient() || new lightning_faucet_js_1.LightningFaucetClient('recovery-placeholder');
                 const result = await tempClient.recoverAccount(parsed.recovery_code);
                 // Auto-switch to the new key
-                client = new lightning_faucet_js_1.LightningFaucetClient(result.apiKey);
+                session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
                 return {
                     content: [
                         {
@@ -1207,9 +1241,9 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'rotate_api_key': {
                 const parsed = RotateApiKeySchema.parse(args);
-                const result = await requireClient().rotateApiKey(parsed.agent_id);
+                const result = await session.requireClient().rotateApiKey(parsed.agent_id);
                 // Auto-switch to the new key
-                client = new lightning_faucet_js_1.LightningFaucetClient(result.apiKey);
+                session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
                 return {
                     content: [
                         {
@@ -1229,7 +1263,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'get_info': {
                 GetInfoSchema.parse(args);
-                const result = await requireClient().getInfo();
+                const result = await session.requireClient().getInfo();
                 return {
                     content: [
                         {
@@ -1249,7 +1283,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'decode_invoice': {
                 const parsed = DecodeInvoiceSchema.parse(args);
-                const result = await requireClient().decodeInvoice(parsed.bolt11);
+                const result = await session.requireClient().decodeInvoice(parsed.bolt11);
                 return {
                     content: [
                         {
@@ -1270,7 +1304,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'get_rate_limits': {
                 GetRateLimitsSchema.parse(args);
-                const result = await requireClient().getRateLimits();
+                const result = await session.requireClient().getRateLimits();
                 return {
                     content: [
                         {
@@ -1290,7 +1324,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'withdraw': {
                 const parsed = WithdrawSchema.parse(args);
-                const result = await requireClient().withdraw(parsed.invoice);
+                const result = await session.requireClient().withdraw(parsed.invoice);
                 return {
                     content: [
                         {
@@ -1313,7 +1347,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const amountSats = args && typeof args === 'object' && 'amount_sats' in args
                     ? args.amount_sats
                     : undefined;
-                const result = await requireClient().createWithdrawLink(amountSats);
+                const result = await session.requireClient().createWithdrawLink(amountSats);
                 return {
                     content: [
                         {
@@ -1337,7 +1371,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'sweep_agent': {
                 const parsed = SweepAgentSchema.parse(args);
                 const amount = typeof parsed.amount_sats === 'string' ? 999999999 : parsed.amount_sats;
-                const result = await requireClient().sweepAgent(parsed.agent_id, amount);
+                const result = await session.requireClient().sweepAgent(parsed.agent_id, amount);
                 return {
                     content: [
                         {
@@ -1355,7 +1389,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'pay_lightning_address': {
                 const parsed = PayLightningAddressSchema.parse(args);
-                const result = await requireClient().payLightningAddress(parsed.address, parsed.amount_sats, parsed.comment);
+                const result = await session.requireClient().payLightningAddress(parsed.address, parsed.amount_sats, parsed.comment);
                 return {
                     content: [
                         {
@@ -1377,7 +1411,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'set_nostr_identity': {
                 const parsed = SetNostrIdentitySchema.parse(args);
-                const result = await requireClient().setNostrIdentity(parsed.private_key);
+                const result = await session.requireClient().setNostrIdentity(parsed.private_key);
                 return {
                     content: [
                         {
@@ -1393,7 +1427,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'get_nostr_identity': {
-                const result = await requireClient().getNostrIdentity();
+                const result = await session.requireClient().getNostrIdentity();
                 return {
                     content: [
                         {
@@ -1410,7 +1444,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'nostr_zap': {
                 const parsed = NostrZapSchema.parse(args);
-                const result = await requireClient().nostrZap(parsed.address, parsed.amount_sats, parsed.recipient_pubkey, parsed.content, parsed.event_id, parsed.relays);
+                const result = await session.requireClient().nostrZap(parsed.address, parsed.amount_sats, parsed.recipient_pubkey, parsed.content, parsed.event_id, parsed.relays);
                 return {
                     content: [
                         {
@@ -1434,7 +1468,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'transfer_to_agent': {
                 const parsed = TransferToAgentSchema.parse(args);
-                const result = await requireClient().transferToAgent(parsed.to_agent_id, parsed.amount_sats, parsed.from_agent_id);
+                const result = await session.requireClient().transferToAgent(parsed.to_agent_id, parsed.amount_sats, parsed.from_agent_id);
                 return {
                     content: [
                         {
@@ -1466,7 +1500,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                         isError: true,
                     };
                 }
-                const result = await requireClient().deleteAgent(parsed.agent_id);
+                const result = await session.requireClient().deleteAgent(parsed.agent_id);
                 return {
                     content: [
                         {
@@ -1485,7 +1519,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'lnurl_auth': {
                 const parsed = LnurlAuthSchema.parse(args);
-                const result = await requireClient().lnurlAuth(parsed.lnurl);
+                const result = await session.requireClient().lnurlAuth(parsed.lnurl);
                 return {
                     content: [
                         {
@@ -1501,7 +1535,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'claim_lnurl_withdraw': {
                 const parsed = ClaimLnurlWithdrawSchema.parse(args);
-                const result = await requireClient().claimLnurlWithdraw(parsed.lnurl);
+                const result = await session.requireClient().claimLnurlWithdraw(parsed.lnurl);
                 return {
                     content: [
                         {
@@ -1519,7 +1553,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'keysend': {
                 const parsed = KeysendSchema.parse(args);
-                const result = await requireClient().keysend(parsed.destination, parsed.amount_sats, parsed.message);
+                const result = await session.requireClient().keysend(parsed.destination, parsed.amount_sats, parsed.message);
                 return {
                     content: [
                         {
@@ -1543,7 +1577,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'board_read': {
                 const parsed = BoardReadSchema.parse(args);
-                const result = await requireClient().boardRead(parsed.sort, parsed.topic, parsed.limit, parsed.offset);
+                const result = await session.requireClient().boardRead(parsed.sort, parsed.topic, parsed.limit, parsed.offset);
                 return {
                     content: [
                         {
@@ -1555,7 +1589,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'board_post': {
                 const parsed = BoardPostSchema.parse(args);
-                const result = await requireClient().boardPost(parsed.content, parsed.topic);
+                const result = await session.requireClient().boardPost(parsed.content, parsed.topic);
                 return {
                     content: [
                         {
@@ -1567,7 +1601,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'board_reply': {
                 const parsed = BoardReplySchema.parse(args);
-                const result = await requireClient().boardReply(parsed.post_id, parsed.content);
+                const result = await session.requireClient().boardReply(parsed.post_id, parsed.content);
                 return {
                     content: [
                         {
@@ -1579,7 +1613,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'board_vote': {
                 const parsed = BoardVoteSchema.parse(args);
-                const result = await requireClient().boardVote(parsed.post_id, parsed.direction);
+                const result = await session.requireClient().boardVote(parsed.post_id, parsed.direction);
                 return {
                     content: [
                         {
@@ -1602,7 +1636,9 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
         }
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+        // Sanitize error messages: strip HTTP details, internal paths, and stack traces
+        const errorMessage = sanitizeErrorMessage(rawMessage);
         return {
             content: [
                 {
@@ -1627,4 +1663,3 @@ main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
 });
-//# sourceMappingURL=index.js.map

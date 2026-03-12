@@ -7,7 +7,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LightningFaucetClient = void 0;
 exports.registerOperator = registerOperator;
-const API_BASE_URL = 'https://lightningfaucet.com/ai-agents/api';
+const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
 class LightningFaucetClient {
     apiKey;
     constructor(apiKey) {
@@ -33,7 +33,8 @@ class LightningFaucetClient {
             body: JSON.stringify(payload),
         });
         if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+            // Don't include statusText in error — it may expose server internals
+            throw new Error(`Request failed (HTTP ${response.status})`);
         }
         const result = await response.json();
         if (!result.success) {
@@ -428,7 +429,7 @@ class LightningFaucetClient {
             }),
         });
         if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
+            throw new Error(`Request failed (HTTP ${response.status})`);
         }
         const result = await response.json();
         if (!result.success) {
@@ -792,7 +793,7 @@ async function registerOperator(name, email) {
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
+        throw new Error(`Request failed (HTTP ${response.status})`);
     }
     const result = await response.json();
     if (!result.success) {
@@ -807,4 +808,3 @@ async function registerOperator(name, email) {
         recoveryCode: result.recovery_code || '',
     };
 }
-//# sourceMappingURL=lightning-faucet.js.map

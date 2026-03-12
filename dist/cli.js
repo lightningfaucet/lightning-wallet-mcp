@@ -13,7 +13,7 @@ const lightning_faucet_js_1 = require("./lightning-faucet.js");
 const VERSION = '1.1.0';
 // --- Helpers ---
 function getApiKey() {
-    const key = process.env.LIGHTNING_WALLET_API_KEY || process.env.LIGHTNING_FAUCET_API_KEY;
+    const key = process.env.LIGHTNING_WALLET_API_KEY;
     if (!key) {
         error('No API key found. Set LIGHTNING_WALLET_API_KEY or run: lw register');
     }
@@ -435,4 +435,3 @@ async function main() {
     }
 }
 main();
-//# sourceMappingURL=cli.js.map
