@@ -1,4 +1,8 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
-  "maintainers": ["pfergi42", "lightningfaucet"]
+  "maintainers": ["pfergi42", "lightningfaucet"],
+  "related_servers": [
+    "getAlby/lightning-tools-mcp-server",
+    "rhein1/agoragentic-integrations"
+  ]
 }
