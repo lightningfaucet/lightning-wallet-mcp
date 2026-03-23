@@ -1,19 +1,16 @@
-FROM node:20-alpine
-
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy built files
-COPY dist/ ./dist/
-
-# Set environment variables (users override these)
-ENV LIGHTNING_WALLET_API_URL=https://lightningfaucet.com/api/agent
-ENV LIGHTNING_WALLET_API_KEY=
-
-# Run the MCP server
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/dist ./dist
+USER node
 ENTRYPOINT ["node", "dist/index.js"]
