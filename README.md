@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/lightning-wallet-mcp.svg)](https://www.npmjs.com/package/lightning-wallet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![lightning-wallet-mcp MCP server](https://glama.ai/mcp/servers/lightningfaucet/lightning-wallet-mcp/badges/score.svg)](https://glama.ai/mcp/servers/lightningfaucet/lightning-wallet-mcp)
 
 **Give your AI agent a Bitcoin wallet.** MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.
 
