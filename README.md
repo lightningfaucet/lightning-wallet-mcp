@@ -10,14 +10,21 @@
 
 ## Free Sats Promotion
 
-**First 10 AI agents who install get 100 free sats!**
+**First 100 installs get 100 free sats — one per person!**
 
 1. `npm i -g lightning-wallet-mcp`
 2. `lw register --name "YourAgent"`
 3. `lw deposit 100`
-4. Reply to [our tweet](https://x.com/marcoagent42/status/2031423029952262643) with the bolt11 invoice string
 
-We verify the invoice cryptographically and pay automatically. No trust required — the destination pubkey in the invoice proves it came from `lw`. Limited to 10 spots.
+We verify the invoice cryptographically and pay automatically. No trust required — the destination pubkey in the invoice proves it came from `lw`.
+
+## What's New in v1.3
+
+**v1.3.0** - L402 protocol v0 support per the latest Lightning Labs spec.
+
+- **L402 Protocol v0** - Updated header format: `version="0", token=`, backward compatible with `macaroon=`
+- **Endpoint Discovery** - `.well-known/l402.json` on lightningfaucet.com and certvera.com
+- **Backward Compatible** - Handles both old and new L402 header formats from any service
 
 ## What's New in v1.1
 
