@@ -118,7 +118,24 @@ interface WhoamiResponse extends ApiResponse {
 }
 export declare class LightningFaucetClient {
     private apiKey;
+    private agentIdCache;
     constructor(apiKey: string);
+    /**
+     * Resolve the current agent id for hook proposals (best-effort, cached).
+     * Returns null if it cannot be determined; a payment is never blocked solely
+     * because identity resolution failed — that decision is left to the policy hook.
+     */
+    private resolveAgentId;
+    /**
+     * Run the optional pre-payment policy hook before executing a payment.
+     *
+     * No-op when `PRE_PAYMENT_HOOK_URL` is unset (behaviour is unchanged). When a
+     * hook is configured this POSTs a vendor-neutral proposal and throws
+     * `PolicyDenied` if the hook — or fail-closed handling of a hook error —
+     * denies the payment. Only the four explicit payment methods call this; it is
+     * invoked before any funds-moving request is sent.
+     */
+    private enforcePrePaymentPolicy;
     /**
      * Make an API request to Lightning Faucet
      */

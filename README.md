@@ -500,6 +500,74 @@ def verify_webhook(payload, signature, secret):
 
 Check the `X-Webhook-Signature` header against the payload.
 
+## Pre-Payment Policy Hook
+
+An optional, vendor-neutral hook lets an external policy endpoint **allow or deny a payment before it executes**. It is off by default — when `PRE_PAYMENT_HOOK_URL` is unset, behaviour is exactly as before. When set, every outgoing payment (`pay_l402_api`, `pay_invoice`, `keysend`, `pay_lightning_address`) is checked against your endpoint first; a denial aborts the payment before any funds move.
+
+This is useful for spending policies, approval workflows, compliance checks, or any external authorization layer. The hook protocol is generic, so any service implementing the request/response contract below can be wired in by configuration alone.
+
+### Configuration
+
+| Env var | Default | Description |
+|---|---|---|
+| `PRE_PAYMENT_HOOK_URL` | _(unset)_ | Policy endpoint to POST each payment proposal to. Unset disables the hook entirely. |
+| `PRE_PAYMENT_HOOK_TIMEOUT_MS` | `3000` | Per-request timeout in milliseconds. |
+| `PRE_PAYMENT_HOOK_FAIL_MODE` | `closed` | `closed` denies a payment if the hook errors or times out; `open` lets it proceed. Default is fail-closed. |
+
+```jsonc
+{
+  "mcpServers": {
+    "lightning-wallet": {
+      "command": "npx",
+      "args": ["lightning-wallet-mcp"],
+      "env": {
+        "LIGHTNING_WALLET_API_KEY": "your-api-key",
+        "PRE_PAYMENT_HOOK_URL": "https://your-policy-endpoint.example/hook"
+      }
+    }
+  }
+}
+```
+
+### Hook request (POST from the client)
+
+The proposal describes only the proposed payment — **it never includes your wallet API key**.
+
+```json
+{
+  "proposal_id": "f7e1…",
+  "agent_id": 42,
+  "protocol": "l402",
+  "destination_or_url": "https://api.example/paid-endpoint",
+  "amount_sats": null,
+  "max_payment_sats": 1000,
+  "method": "GET",
+  "ts": "2026-06-06T18:00:00.000Z"
+}
+```
+
+`protocol` is one of `l402`, `x402`, `bolt11`, `keysend`, `lnaddress`. `amount_sats` is the exact amount when it is known at hook time: for `keysend` and `lnaddress` it is the requested amount, and for `bolt11` it is decoded locally from the invoice (no extra API call). For `l402`/`x402` it is `null` because the amount is set by the payment challenge at execution time — there the hook enforces `max_payment_sats` (the agent-authorised ceiling) up front, and the exact settled amount is available afterward via [webhooks](#webhooks). `max_payment_sats` is the agent-authorised ceiling when applicable.
+
+**Exactly what leaves the wallet.** Only the eight fields above are sent to your hook endpoint: `proposal_id`, `agent_id`, `protocol`, `destination_or_url`, `amount_sats`, `max_payment_sats`, `method`, `ts`. The wallet API key and any other credentials are **never** included.
+
+**Coverage.** The hook gates every agent-initiated spend: `pay_l402_api`, `pay_invoice`, `keysend`, `pay_lightning_address`, and Nostr zaps. Operator-scoped fund management (withdrawals, agent funding, agent-to-agent transfers) is intentionally **not** gated — those are operator actions, not agent spends.
+
+### Hook response (your endpoint returns)
+
+```json
+{ "decision": "allow" }
+```
+
+```json
+{ "decision": "deny", "reason": { "code": "over_limit", "message": "Exceeds per-transaction limit" } }
+```
+
+- `allow` → the payment proceeds.
+- `deny` → the payment is aborted and the tool returns a `PolicyDenied` error surfacing `reason.message`.
+- An optional `attestation` field (any JSON) is treated as opaque by the client — it is logged to stderr and otherwise ignored, so a policy service can return a signed decision for downstream auditing.
+
+On a hook error, timeout, or unrecognized response, the `PRE_PAYMENT_HOOK_FAIL_MODE` applies (deny by default).
+
 ## Pricing
 
 Lightning Faucet charges a 2% platform fee (min 1 sat) on outgoing payments:
