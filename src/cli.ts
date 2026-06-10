@@ -9,9 +9,9 @@
  * Usage: lw <command> [options]
  */
 
-import { LightningFaucetClient, registerOperator } from './lightning-faucet.js';
+import { LightningFaucetClient, registerOperator, getPublicInfo } from './lightning-faucet.js';
 
-const VERSION = '1.1.0';
+const VERSION = '1.4.0';
 
 // --- Helpers ---
 
@@ -262,9 +262,24 @@ async function cmdTransactions(flags: Record<string, string | boolean>): Promise
   };
 }
 
-async function cmdInfo(): Promise<unknown> {
+
+async function cmdSetEmail(positional: string[]): Promise<unknown> {
+  const email = positional[0];
+  if (!email) error('Usage: lw set-email <email>');
   const client = getClient();
-  const result = await client.getInfo();
+  return client.updateOperator({ email });
+}
+
+async function cmdClaimPromo(): Promise<unknown> {
+  const client = getClient();
+  return client.claimPromo();
+}
+
+async function cmdInfo(): Promise<unknown> {
+  // Service info is public - works with or without an API key
+  const result = process.env.LIGHTNING_WALLET_API_KEY
+    ? await getClient().getInfo()
+    : await getPublicInfo();
   return {
     version: result.version,
     api_version: result.apiVersion,
@@ -323,6 +338,9 @@ COMMANDS
   list-agents | agents             List all agents
 
   transactions                    Recent transactions [--limit 10] [--offset 0]
+  set-email <email>               Set operator email (verification link emailed)
+  claim-promo                     Claim the 100-sat install promo
+                                    (requires verified email + 24h account age)
   help                            Show this help
 
 WEBHOOKS
@@ -415,6 +433,12 @@ async function main(): Promise<void> {
         break;
       case 'transactions':
         result = await cmdTransactions(flags);
+        break;
+      case 'set-email':
+        result = await cmdSetEmail(positional);
+        break;
+      case 'claim-promo':
+        result = await cmdClaimPromo();
         break;
       case 'info':
         result = await cmdInfo();

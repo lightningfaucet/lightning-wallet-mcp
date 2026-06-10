@@ -10,7 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
-const VERSION = '1.1.0';
+const VERSION = '1.4.0';
 // --- Helpers ---
 function getApiKey() {
     const key = process.env.LIGHTNING_WALLET_API_KEY;
@@ -256,9 +256,22 @@ async function cmdTransactions(flags) {
         has_more: result.has_more,
     };
 }
-async function cmdInfo() {
+async function cmdSetEmail(positional) {
+    const email = positional[0];
+    if (!email)
+        error('Usage: lw set-email <email>');
     const client = getClient();
-    const result = await client.getInfo();
+    return client.updateOperator({ email });
+}
+async function cmdClaimPromo() {
+    const client = getClient();
+    return client.claimPromo();
+}
+async function cmdInfo() {
+    // Service info is public - works with or without an API key
+    const result = process.env.LIGHTNING_WALLET_API_KEY
+        ? await getClient().getInfo()
+        : await (0, lightning_faucet_js_1.getPublicInfo)();
     return {
         version: result.version,
         api_version: result.apiVersion,
@@ -316,6 +329,9 @@ COMMANDS
   list-agents | agents             List all agents
 
   transactions                    Recent transactions [--limit 10] [--offset 0]
+  set-email <email>               Set operator email (verification link emailed)
+  claim-promo                     Claim the 100-sat install promo
+                                    (requires verified email + 24h account age)
   help                            Show this help
 
 WEBHOOKS
@@ -403,6 +419,12 @@ async function main() {
                 break;
             case 'transactions':
                 result = await cmdTransactions(flags);
+                break;
+            case 'set-email':
+                result = await cmdSetEmail(positional);
+                break;
+            case 'claim-promo':
+                result = await cmdClaimPromo();
                 break;
             case 'info':
                 result = await cmdInfo();
