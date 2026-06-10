@@ -119,6 +119,13 @@ const FundAgentSchema = zod_1.z.object({
     amount_sats: zod_1.z.number().int().min(1).max(10_000_000).describe('Amount in satoshis to transfer'),
 });
 const ListAgentsSchema = zod_1.z.object({});
+const UpdateOperatorSchema = zod_1.z.object({
+    email: zod_1.z.string().email().optional(),
+    name: zod_1.z.string().min(1).max(100).optional(),
+});
+const ClaimPromoSchema = zod_1.z.object({
+    promo_code: zod_1.z.string().optional(),
+});
 const SetOperatorKeySchema = zod_1.z.object({
     api_key: zod_1.z.string().min(10, 'API key is too short').max(200, 'API key is too long')
         .describe('The operator API key to use for subsequent requests'),
@@ -339,6 +346,29 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                 properties: {
                     name: { type: 'string', description: 'Name for the operator account (optional)' },
                     email: { type: 'string', description: 'Email address — strongly recommended for onboarding tips, setup help, and product updates. Without it we cannot reach you if there are issues.' },
+                },
+                required: [],
+            },
+        },
+        {
+            name: 'update_operator',
+            description: 'Update operator profile: set your email (sends a verification link - required for the free-sats promo) and/or display name. REQUIRES OPERATOR KEY.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    email: { type: 'string', description: 'Email address to set. A verification link is emailed; click it to verify.' },
+                    name: { type: 'string', description: 'Display name for the operator account' },
+                },
+                required: [],
+            },
+        },
+        {
+            name: 'claim_promo',
+            description: 'Claim the free-sats install promo (100 sats, first 100 installs). Requires a verified email (set one with update_operator, then click the emailed link) and an operator account at least 24 hours old. REQUIRES OPERATOR KEY.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    promo_code: { type: 'string', description: "Promo code (default: 'first_100_installs')" },
                 },
                 required: [],
             },
@@ -943,6 +973,38 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     ],
                 };
             }
+            case 'update_operator': {
+                const parsed = UpdateOperatorSchema.parse(args);
+                if (parsed.email === undefined && parsed.name === undefined) {
+                    throw new Error('Provide email and/or name to update.');
+                }
+                const result = await session.requireClient().updateOperator(parsed);
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify({
+                                success: result.success !== false,
+                                message: result.message || 'Operator updated',
+                                updated_fields: result.updated_fields,
+                                email_verification: result.email_verification,
+                            }, null, 2),
+                        },
+                    ],
+                };
+            }
+            case 'claim_promo': {
+                const parsed = ClaimPromoSchema.parse(args);
+                const result = await session.requireClient().claimPromo(parsed.promo_code);
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify(result, null, 2),
+                        },
+                    ],
+                };
+            }
             case 'get_deposit_invoice': {
                 const parsed = GetDepositInvoiceSchema.parse(args);
                 const result = await session.requireClient().getDepositInvoice(parsed.amount_sats);
@@ -1263,7 +1325,15 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'get_info': {
                 GetInfoSchema.parse(args);
-                const result = await session.requireClient().getInfo();
+                // Service info is public - fall back to an unauthenticated request so
+                // first-run users can check the service before registering.
+                let result;
+                try {
+                    result = await session.requireClient().getInfo();
+                }
+                catch {
+                    result = await (0, lightning_faucet_js_1.getPublicInfo)();
+                }
                 return {
                     content: [
                         {

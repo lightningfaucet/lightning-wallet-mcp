@@ -6,6 +6,20 @@
 
 **Give your AI agent a Bitcoin wallet.** MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.
 
+## What's New in v1.4
+
+- **`update_operator` tool / `lw set-email`** - set your operator email from the MCP client or CLI; a verification link is emailed to you.
+- **`claim_promo` tool / `lw claim-promo`** - claim the free-sats install promo directly from your agent. Requirements: verified email + operator account at least 24 hours old.
+- **`get_info` works before registration** - service info no longer requires an API key.
+
+### Free 100 sats for new operators
+
+1. `lw register --email you@example.com` (or the `register_operator` MCP tool with an email)
+2. Click the verification link we email you
+3. After your account is 24 hours old: `lw claim-promo` (or the `claim_promo` MCP tool)
+
+One bonus per operator, first 100 installs only, no deposit required.
+
 ## What's New in v1.3
 
 **v1.3.0** - L402 protocol v0 support per the latest Lightning Labs spec.
@@ -158,6 +172,9 @@ Then ask Claude: *"Register a new Lightning Wallet operator account"*
 | `get_deposit_invoice` | Create invoice to fund operator account |
 | `withdraw` | Withdraw funds to external Lightning destination |
 | `set_operator_key` | Switch to operator credentials |
+
+- `update_operator` - set operator email (sends verification link) and/or name
+- `claim_promo` - claim the free-sats install promo (verified email + 24h account)
 
 ### Agent Management
 

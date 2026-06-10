@@ -1418,6 +1418,35 @@ export class LightningFaucetClient {
       direction,
     });
   }
+
+  /**
+   * Update operator profile (email and/or name). Setting an email sends a
+   * verification link - a verified email is required for the free-sats promo.
+   */
+  async updateOperator(opts: { email?: string; name?: string }): Promise<ApiResponse & {
+    message?: string;
+    updated_fields?: string[];
+    email_verification?: string;
+  }> {
+    const params: Record<string, unknown> = {};
+    if (opts.email !== undefined) params.email = opts.email;
+    if (opts.name !== undefined) params.name = opts.name;
+    return this.request('update_operator', params);
+  }
+
+  /**
+   * Claim a promo bonus (default: the first_100_installs free-sats promo).
+   * Requires a verified email and an operator account at least 24 hours old.
+   */
+  async claimPromo(promoCode?: string): Promise<ApiResponse & {
+    promo?: string;
+    bonus_sats?: number;
+    message?: string;
+  }> {
+    const params: Record<string, unknown> = {};
+    if (promoCode) params.promo_code = promoCode;
+    return this.request('claim_promo', params);
+  }
 }
 
 // Static method for registration (no API key needed)
@@ -1460,5 +1489,43 @@ export async function registerOperator(name?: string, email?: string): Promise<{
     operatorId: result.operator_id || 0,
     apiKey: result.api_key,
     recoveryCode: result.recovery_code || '',
+  };
+}
+
+
+// Public service info (no API key needed)
+export async function getPublicInfo(): Promise<{
+  version: string;
+  apiVersion: string;
+  status: string;
+  maxPaymentSats: number;
+  minPaymentSats: number;
+  supportedFeatures: string[];
+  rawResponse: ApiResponse;
+}> {
+  const response = await fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'get_info' }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+  const result = (await response.json()) as ApiResponse & {
+    version?: string;
+    api_version?: string;
+    status?: string;
+    max_payment_sats?: number;
+    min_payment_sats?: number;
+    supported_features?: string[];
+  };
+  return {
+    version: result.version || '2.0.0',
+    apiVersion: result.api_version || '1.0',
+    status: result.status || 'operational',
+    maxPaymentSats: result.max_payment_sats || 1000000,
+    minPaymentSats: result.min_payment_sats || 1,
+    supportedFeatures: result.supported_features || ['l402', 'webhooks', 'lightning_address'],
+    rawResponse: result,
   };
 }

@@ -513,10 +513,40 @@ export declare class LightningFaucetClient {
      * Vote on a post
      */
     boardVote(postId: number, direction: string): Promise<Record<string, unknown>>;
+    /**
+     * Update operator profile (email and/or name). Setting an email sends a
+     * verification link - a verified email is required for the free-sats promo.
+     */
+    updateOperator(opts: {
+        email?: string;
+        name?: string;
+    }): Promise<ApiResponse & {
+        message?: string;
+        updated_fields?: string[];
+        email_verification?: string;
+    }>;
+    /**
+     * Claim a promo bonus (default: the first_100_installs free-sats promo).
+     * Requires a verified email and an operator account at least 24 hours old.
+     */
+    claimPromo(promoCode?: string): Promise<ApiResponse & {
+        promo?: string;
+        bonus_sats?: number;
+        message?: string;
+    }>;
 }
 export declare function registerOperator(name?: string, email?: string): Promise<{
     operatorId: number;
     apiKey: string;
     recoveryCode: string;
+}>;
+export declare function getPublicInfo(): Promise<{
+    version: string;
+    apiVersion: string;
+    status: string;
+    maxPaymentSats: number;
+    minPaymentSats: number;
+    supportedFeatures: string[];
+    rawResponse: ApiResponse;
 }>;
 export {};
