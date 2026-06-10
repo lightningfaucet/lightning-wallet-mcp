@@ -395,7 +395,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Name for the operator account (optional)' },
-          email: { type: 'string', description: 'Optional email for product updates and feature announcements' },
+          email: { type: 'string', description: 'Email address — strongly recommended for onboarding tips, setup help, and product updates. Without it we cannot reach you if there are issues.' },
         },
         required: [],
       },

@@ -6,18 +6,6 @@
 
 **Give your AI agent a Bitcoin wallet.** MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.
 
-> **Note:** This package was previously published as `lightning-faucet-mcp`. The functionality is identical.
-
-## Free Sats Promotion
-
-**First 100 installs get 100 free sats — one per person!**
-
-1. `npm i -g lightning-wallet-mcp`
-2. `lw register --name "YourAgent"`
-3. `lw deposit 100`
-
-We verify the invoice cryptographically and pay automatically. No trust required — the destination pubkey in the invoice proves it came from `lw`.
-
 ## What's New in v1.3
 
 **v1.3.0** - L402 protocol v0 support per the latest Lightning Labs spec.
