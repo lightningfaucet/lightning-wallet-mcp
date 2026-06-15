@@ -404,7 +404,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Name for the operator account (optional)' },
-          email: { type: 'string', description: 'Email address — pass it here to claim the 100 free-sats install promo (a verification link is sent; once verified, call claim_promo to get funded). Also used for onboarding tips and important account notices.' },
+          email: { type: 'string', description: 'Email address — pass it here to claim the 100 free-sats install promo (a verification link is sent; once verified, and once the operator account is at least 24 hours old, call claim_promo to get funded). Also used for onboarding tips and important account notices.' },
         },
         required: [],
       },
