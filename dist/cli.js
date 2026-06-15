@@ -331,7 +331,7 @@ COMMANDS
   transactions                    Recent transactions [--limit 10] [--offset 0]
   set-email <email>               Set operator email (verification link emailed)
   claim-promo                     Claim the 100-sat install promo
-                                    (requires verified email + 24h account age)
+                                    (requires verified email + 3h account age)
   help                            Show this help
 
 WEBHOOKS

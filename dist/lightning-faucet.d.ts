@@ -527,7 +527,7 @@ export declare class LightningFaucetClient {
     }>;
     /**
      * Claim a promo bonus (default: the first_100_installs free-sats promo).
-     * Requires a verified email and an operator account at least 24 hours old.
+     * Requires a verified email and an operator account at least 3 hours old.
      */
     claimPromo(promoCode?: string): Promise<ApiResponse & {
         promo?: string;

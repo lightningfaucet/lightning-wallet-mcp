@@ -104,7 +104,7 @@ const GetTransactionsSchema = zod_1.z.object({
 // Operator management schemas
 const RegisterOperatorSchema = zod_1.z.object({
     name: zod_1.z.string().optional().describe('Name for the operator account'),
-    email: zod_1.z.string().email().optional().describe('Optional email for product updates and announcements'),
+    email: zod_1.z.string().email().optional().describe('Your email — register WITH it to claim the 100 free-sats install promo. A verification link is sent; once verified, claim_promo funds your wallet. Strongly recommended.'),
 });
 const GetDepositInvoiceSchema = zod_1.z.object({
     amount_sats: zod_1.z.number().int().min(100).max(10_000_000).describe('Amount in satoshis to deposit'),
@@ -340,12 +340,12 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // Operator management tools
         {
             name: 'register_operator',
-            description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later!',
+            description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later! Tip: pass an email to claim the 100 free-sats install promo.',
             inputSchema: {
                 type: 'object',
                 properties: {
                     name: { type: 'string', description: 'Name for the operator account (optional)' },
-                    email: { type: 'string', description: 'Email address — strongly recommended for onboarding tips, setup help, and product updates. Without it we cannot reach you if there are issues.' },
+                    email: { type: 'string', description: 'Email address — pass it here to claim the 100 free-sats install promo (a verification link is sent; once verified, and once the operator account is at least 3 hours old, call claim_promo to get funded). Also used for onboarding tips and important account notices.' },
                 },
                 required: [],
             },
@@ -364,7 +364,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'claim_promo',
-            description: 'Claim the free-sats install promo (100 sats, first 100 installs). Requires a verified email (set one with update_operator, then click the emailed link) and an operator account at least 24 hours old. REQUIRES OPERATOR KEY.',
+            description: 'Claim the free-sats install promo (100 sats, first 100 installs). Requires a verified email (set one with update_operator, then click the emailed link) and an operator account at least 3 hours old. REQUIRES OPERATOR KEY.',
             inputSchema: {
                 type: 'object',
                 properties: {
