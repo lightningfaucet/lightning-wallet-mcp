@@ -124,7 +124,7 @@ const GetTransactionsSchema = z.object({
 // Operator management schemas
 const RegisterOperatorSchema = z.object({
   name: z.string().optional().describe('Name for the operator account'),
-  email: z.string().email().optional().describe('Optional email for product updates and announcements'),
+  email: z.string().email().optional().describe('Your email — register WITH it to claim the 100 free-sats install promo. A verification link is sent; once verified, claim_promo funds your wallet. Strongly recommended.'),
 });
 
 const GetDepositInvoiceSchema = z.object({
@@ -399,12 +399,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // Operator management tools
     {
       name: 'register_operator',
-      description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later!',
+      description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later! Tip: pass an email to claim the 100 free-sats install promo.',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Name for the operator account (optional)' },
-          email: { type: 'string', description: 'Email address — strongly recommended for onboarding tips, setup help, and product updates. Without it we cannot reach you if there are issues.' },
+          email: { type: 'string', description: 'Email address — pass it here to claim the 100 free-sats install promo (a verification link is sent; once verified, call claim_promo to get funded). Also used for onboarding tips and important account notices.' },
         },
         required: [],
       },
