@@ -8,14 +8,74 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LightningFaucetClient = void 0;
 exports.registerOperator = registerOperator;
 exports.getPublicInfo = getPublicInfo;
+const pre_payment_hook_js_1 = require("./pre-payment-hook.js");
+const bolt11_js_1 = require("./bolt11.js");
 const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
+function safeStringify(value) {
+    try {
+        return JSON.stringify(value);
+    }
+    catch {
+        return '[unserializable]';
+    }
+}
 class LightningFaucetClient {
     apiKey;
+    agentIdCache;
     constructor(apiKey) {
         if (!apiKey) {
             throw new Error('API key is required');
         }
         this.apiKey = apiKey;
+    }
+    /**
+     * Resolve the current agent id for hook proposals (best-effort, cached).
+     * Returns null if it cannot be determined; a payment is never blocked solely
+     * because identity resolution failed — that decision is left to the policy hook.
+     */
+    async resolveAgentId() {
+        if (this.agentIdCache !== undefined) {
+            return this.agentIdCache;
+        }
+        try {
+            const who = await this.whoami();
+            this.agentIdCache = who.id || null;
+        }
+        catch {
+            this.agentIdCache = null;
+        }
+        return this.agentIdCache;
+    }
+    /**
+     * Run the optional pre-payment policy hook before executing a payment.
+     *
+     * No-op when `PRE_PAYMENT_HOOK_URL` is unset (behaviour is unchanged). When a
+     * hook is configured this POSTs a vendor-neutral proposal and throws
+     * `PolicyDenied` if the hook — or fail-closed handling of a hook error —
+     * denies the payment. Only the four explicit payment methods call this; it is
+     * invoked before any funds-moving request is sent.
+     */
+    async enforcePrePaymentPolicy(params) {
+        const config = (0, pre_payment_hook_js_1.getPrePaymentHookConfig)();
+        if (!config) {
+            return;
+        }
+        const agentId = await this.resolveAgentId();
+        const proposal = {
+            proposal_id: globalThis.crypto.randomUUID(),
+            agent_id: agentId,
+            protocol: params.protocol,
+            destination_or_url: params.destinationOrUrl,
+            amount_sats: params.amountSats,
+            max_payment_sats: params.maxPaymentSats,
+            method: params.method ?? null,
+            ts: new Date().toISOString(),
+        };
+        const { attestation } = await (0, pre_payment_hook_js_1.runPrePaymentHook)(proposal, config);
+        if (attestation !== undefined) {
+            // Opaque to this client — logged on stderr to avoid corrupting MCP stdio.
+            console.error(`[pre-payment-hook] payment allowed with attestation: ${safeStringify(attestation)}`);
+        }
     }
     /**
      * Make an API request to Lightning Faucet
@@ -57,6 +117,15 @@ class LightningFaucetClient {
      * Pay an L402-protected API endpoint
      */
     async l402Pay(url, method = 'GET', body, maxPaymentSats = 1000) {
+        // L402 vs X402 is auto-detected server-side; the actual amount is set by the
+        // challenge, so only the agent-authorised ceiling is known at hook time.
+        await this.enforcePrePaymentPolicy({
+            protocol: 'l402',
+            destinationOrUrl: url,
+            amountSats: null,
+            maxPaymentSats,
+            method: method.toUpperCase(),
+        });
         const requestData = {
             url,
             method: method.toUpperCase(),
@@ -93,6 +162,15 @@ class LightningFaucetClient {
      * Pay a BOLT11 Lightning invoice
      */
     async payInvoice(bolt11, maxFeeSats) {
+        // Decode the amount from the invoice locally (no extra API call) so the hook
+        // receives the exact amount; null only if the invoice is amountless/unparseable.
+        await this.enforcePrePaymentPolicy({
+            protocol: 'bolt11',
+            destinationOrUrl: bolt11,
+            amountSats: (0, bolt11_js_1.bolt11AmountSats)(bolt11),
+            maxPaymentSats: null,
+            method: null,
+        });
         const data = {
             invoice: bolt11,
         };
@@ -573,6 +651,13 @@ class LightningFaucetClient {
      * Pay to a Lightning address
      */
     async payLightningAddress(address, amountSats, comment) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'lnaddress',
+            destinationOrUrl: address,
+            amountSats,
+            maxPaymentSats: amountSats,
+            method: null,
+        });
         const data = {
             address,
             amount_sats: amountSats,
@@ -663,6 +748,13 @@ class LightningFaucetClient {
      * Send keysend payment
      */
     async keysend(destination, amountSats, message) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'keysend',
+            destinationOrUrl: destination,
+            amountSats,
+            maxPaymentSats: amountSats,
+            method: null,
+        });
         const data = {
             destination,
             amount_sats: amountSats,
@@ -714,6 +806,15 @@ class LightningFaucetClient {
      * Falls back to regular Lightning address payment if recipient doesn't support NIP-57
      */
     async nostrZap(address, amountSats, recipientPubkey, content, eventId, relays) {
+        // A Nostr zap settles as a Lightning-address payment, so it is an agent spend
+        // and must pass the policy hook like any other.
+        await this.enforcePrePaymentPolicy({
+            protocol: 'lnaddress',
+            destinationOrUrl: address,
+            amountSats,
+            maxPaymentSats: amountSats,
+            method: null,
+        });
         const data = {
             address,
             amount_sats: amountSats,
