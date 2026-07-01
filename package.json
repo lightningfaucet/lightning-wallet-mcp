@@ -1,6 +1,6 @@
 {
   "name": "lightning-wallet-mcp",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "mcpName": "io.github.lightningfaucet/lightning-wallet-mcp",
   "description": "Lightning wallet for AI agents. MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.",
   "main": "dist/index.js",

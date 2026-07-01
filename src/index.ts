@@ -390,7 +390,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'integer', minimum: 1, maximum: 200, default: 50, description: 'Max transactions to return' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50, description: 'Max transactions to return' },
           offset: { type: 'integer', minimum: 0, default: 0, description: 'Number to skip for pagination' },
         },
         required: [],
