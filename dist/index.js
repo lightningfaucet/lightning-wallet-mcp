@@ -85,7 +85,7 @@ const PayL402ApiSchema = zod_1.z.object({
         .describe('Maximum amount in satoshis to pay for this request'),
 });
 const PayInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
         .describe('BOLT11 invoice string to pay (starts with lnbc...)'),
     max_fee_sats: zod_1.z.number().min(0).optional()
         .describe('Maximum routing fee in satoshis (default: 10% of invoice amount)'),
@@ -98,7 +98,7 @@ const GetInvoiceStatusSchema = zod_1.z.object({
     payment_hash: zod_1.z.string().describe('Payment hash of the invoice to check'),
 });
 const GetTransactionsSchema = zod_1.z.object({
-    limit: zod_1.z.number().min(1).max(200).default(50).describe('Max transactions to return'),
+    limit: zod_1.z.number().min(1).max(100).default(50).describe('Max transactions to return'),
     offset: zod_1.z.number().min(0).default(0).describe('Number to skip for pagination'),
 });
 // Operator management schemas
@@ -173,13 +173,13 @@ const RotateApiKeySchema = zod_1.z.object({
 // Tier 2 schemas
 const GetInfoSchema = zod_1.z.object({});
 const DecodeInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
         .describe('BOLT11 invoice string to decode'),
 });
 const GetRateLimitsSchema = zod_1.z.object({});
 // Tier 3 schemas
 const WithdrawSchema = zod_1.z.object({
-    invoice: zod_1.z.string().regex(/^ln(bc|tb|bcrt)1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    invoice: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
         .describe('BOLT11 invoice to pay out to'),
 });
 const SweepAgentSchema = zod_1.z.object({
@@ -822,7 +822,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     try {
         switch (name) {
             case 'check_balance': {
-                CheckBalanceSchema.parse(args);
+                CheckBalanceSchema.parse(args ?? {});
                 const result = await session.requireClient().checkBalance();
                 return {
                     content: [
@@ -838,7 +838,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'pay_l402_api': {
-                const parsed = PayL402ApiSchema.parse(args);
+                const parsed = PayL402ApiSchema.parse(args ?? {});
                 const result = await session.requireClient().l402Pay(parsed.url, parsed.method, parsed.body, parsed.max_payment_sats);
                 // Determine if the target returned a success response
                 const targetSuccess = result.statusCode >= 200 && result.statusCode < 300;
@@ -870,7 +870,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'pay_invoice': {
-                const parsed = PayInvoiceSchema.parse(args);
+                const parsed = PayInvoiceSchema.parse(args ?? {});
                 const result = await session.requireClient().payInvoice(parsed.bolt11, parsed.max_fee_sats);
                 return {
                     content: [
@@ -892,7 +892,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'create_invoice': {
-                const parsed = CreateInvoiceSchema.parse(args);
+                const parsed = CreateInvoiceSchema.parse(args ?? {});
                 const result = await session.requireClient().createInvoice(parsed.amount_sats, parsed.memo);
                 const invoiceResponse = {
                     success: true,
@@ -914,7 +914,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'get_invoice_status': {
-                const parsed = GetInvoiceStatusSchema.parse(args);
+                const parsed = GetInvoiceStatusSchema.parse(args ?? {});
                 const result = await session.requireClient().getInvoiceStatus(parsed.payment_hash);
                 return {
                     content: [
@@ -934,7 +934,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'get_transactions': {
-                const parsed = GetTransactionsSchema.parse(args);
+                const parsed = GetTransactionsSchema.parse(args ?? {});
                 const result = await session.requireClient().getTransactions(parsed.limit, parsed.offset);
                 return {
                     content: [
@@ -952,7 +952,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             // Operator management tool handlers
             case 'register_operator': {
-                const parsed = RegisterOperatorSchema.parse(args);
+                const parsed = RegisterOperatorSchema.parse(args ?? {});
                 const result = await (0, lightning_faucet_js_1.registerOperator)(parsed.name, parsed.email);
                 // Auto-set credentials so subsequent requests use the new operator key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
@@ -974,7 +974,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'update_operator': {
-                const parsed = UpdateOperatorSchema.parse(args);
+                const parsed = UpdateOperatorSchema.parse(args ?? {});
                 if (parsed.email === undefined && parsed.name === undefined) {
                     throw new Error('Provide email and/or name to update.');
                 }
@@ -994,7 +994,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'claim_promo': {
-                const parsed = ClaimPromoSchema.parse(args);
+                const parsed = ClaimPromoSchema.parse(args ?? {});
                 const result = await session.requireClient().claimPromo(parsed.promo_code);
                 return {
                     content: [
@@ -1006,7 +1006,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'get_deposit_invoice': {
-                const parsed = GetDepositInvoiceSchema.parse(args);
+                const parsed = GetDepositInvoiceSchema.parse(args ?? {});
                 const result = await session.requireClient().getDepositInvoice(parsed.amount_sats);
                 return {
                     content: [
@@ -1026,7 +1026,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'create_agent': {
-                const parsed = CreateAgentSchema.parse(args);
+                const parsed = CreateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
                 return {
                     content: [
@@ -1044,7 +1044,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'fund_agent': {
-                const parsed = FundAgentSchema.parse(args);
+                const parsed = FundAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().fundAgent(parsed.agent_id, parsed.amount_sats);
                 return {
                     content: [
@@ -1062,7 +1062,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'list_agents': {
-                ListAgentsSchema.parse(args);
+                ListAgentsSchema.parse(args ?? {});
                 const result = await session.requireClient().listAgents();
                 return {
                     content: [
@@ -1078,7 +1078,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'set_operator_key': {
-                const parsed = SetOperatorKeySchema.parse(args);
+                const parsed = SetOperatorKeySchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 return {
                     content: [
@@ -1093,7 +1093,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'set_agent_credentials': {
-                const parsed = SetAgentCredentialsSchema.parse(args);
+                const parsed = SetAgentCredentialsSchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 return {
                     content: [
@@ -1108,7 +1108,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'whoami': {
-                WhoamiSchema.parse(args);
+                WhoamiSchema.parse(args ?? {});
                 const result = await session.requireClient().whoami();
                 const response = {
                     success: true,
@@ -1137,7 +1137,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 1: Webhook Management
             // ==========================================
             case 'register_webhook': {
-                const parsed = RegisterWebhookSchema.parse(args);
+                const parsed = RegisterWebhookSchema.parse(args ?? {});
                 const result = await session.requireClient().registerWebhook(parsed.url, parsed.events);
                 return {
                     content: [
@@ -1156,7 +1156,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'list_webhooks': {
-                ListWebhooksSchema.parse(args);
+                ListWebhooksSchema.parse(args ?? {});
                 const result = await session.requireClient().listWebhooks();
                 return {
                     content: [
@@ -1172,7 +1172,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'delete_webhook': {
-                const parsed = DeleteWebhookSchema.parse(args);
+                const parsed = DeleteWebhookSchema.parse(args ?? {});
                 const result = await session.requireClient().deleteWebhook(parsed.webhook_id);
                 return {
                     content: [
@@ -1187,7 +1187,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'test_webhook': {
-                const parsed = TestWebhookSchema.parse(args);
+                const parsed = TestWebhookSchema.parse(args ?? {});
                 const result = await session.requireClient().testWebhook(parsed.webhook_id);
                 return {
                     content: [
@@ -1206,7 +1206,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 1: Budget Management
             // ==========================================
             case 'get_budget_status': {
-                const parsed = GetBudgetStatusSchema.parse(args);
+                const parsed = GetBudgetStatusSchema.parse(args ?? {});
                 const result = await session.requireClient().getBudgetStatus(parsed.agent_id);
                 return {
                     content: [
@@ -1225,7 +1225,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'set_budget': {
-                const parsed = SetBudgetSchema.parse(args);
+                const parsed = SetBudgetSchema.parse(args ?? {});
                 const result = await session.requireClient().setBudget(parsed.agent_id, parsed.budget_limit_sats);
                 return {
                     content: [
@@ -1245,7 +1245,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 1: Agent Lifecycle
             // ==========================================
             case 'deactivate_agent': {
-                const parsed = DeactivateAgentSchema.parse(args);
+                const parsed = DeactivateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().deactivateAgent(parsed.agent_id);
                 return {
                     content: [
@@ -1261,7 +1261,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'reactivate_agent': {
-                const parsed = ReactivateAgentSchema.parse(args);
+                const parsed = ReactivateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().reactivateAgent(parsed.agent_id);
                 return {
                     content: [
@@ -1280,7 +1280,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 1: Recovery & Key Rotation
             // ==========================================
             case 'recover_account': {
-                const parsed = RecoverAccountSchema.parse(args);
+                const parsed = RecoverAccountSchema.parse(args ?? {});
                 // Recovery doesn't need an existing API key — recoverAccount() uses its own fetch
                 const tempClient = session.getClient() || new lightning_faucet_js_1.LightningFaucetClient('recovery-placeholder');
                 const result = await tempClient.recoverAccount(parsed.recovery_code);
@@ -1302,7 +1302,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'rotate_api_key': {
-                const parsed = RotateApiKeySchema.parse(args);
+                const parsed = RotateApiKeySchema.parse(args ?? {});
                 const result = await session.requireClient().rotateApiKey(parsed.agent_id);
                 // Auto-switch to the new key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
@@ -1324,7 +1324,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 2: Service Info & Invoice Decoding
             // ==========================================
             case 'get_info': {
-                GetInfoSchema.parse(args);
+                GetInfoSchema.parse(args ?? {});
                 // Service info is public - fall back to an unauthenticated request so
                 // first-run users can check the service before registering.
                 let result;
@@ -1352,7 +1352,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'decode_invoice': {
-                const parsed = DecodeInvoiceSchema.parse(args);
+                const parsed = DecodeInvoiceSchema.parse(args ?? {});
                 const result = await session.requireClient().decodeInvoice(parsed.bolt11);
                 return {
                     content: [
@@ -1373,7 +1373,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'get_rate_limits': {
-                GetRateLimitsSchema.parse(args);
+                GetRateLimitsSchema.parse(args ?? {});
                 const result = await session.requireClient().getRateLimits();
                 return {
                     content: [
@@ -1393,7 +1393,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 3: Withdrawals & Advanced Payments
             // ==========================================
             case 'withdraw': {
-                const parsed = WithdrawSchema.parse(args);
+                const parsed = WithdrawSchema.parse(args ?? {});
                 const result = await session.requireClient().withdraw(parsed.invoice);
                 return {
                     content: [
@@ -1414,9 +1414,9 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'create_withdraw_link': {
-                const amountSats = args && typeof args === 'object' && 'amount_sats' in args
-                    ? args.amount_sats
-                    : undefined;
+                const { amount_sats: amountSats } = zod_1.z.object({
+                    amount_sats: zod_1.z.coerce.number().int().min(100).optional(),
+                }).parse(args ?? {});
                 const result = await session.requireClient().createWithdrawLink(amountSats);
                 return {
                     content: [
@@ -1439,7 +1439,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'sweep_agent': {
-                const parsed = SweepAgentSchema.parse(args);
+                const parsed = SweepAgentSchema.parse(args ?? {});
                 const amount = typeof parsed.amount_sats === 'string' ? 999999999 : parsed.amount_sats;
                 const result = await session.requireClient().sweepAgent(parsed.agent_id, amount);
                 return {
@@ -1458,7 +1458,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'pay_lightning_address': {
-                const parsed = PayLightningAddressSchema.parse(args);
+                const parsed = PayLightningAddressSchema.parse(args ?? {});
                 const result = await session.requireClient().payLightningAddress(parsed.address, parsed.amount_sats, parsed.comment);
                 return {
                     content: [
@@ -1480,7 +1480,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // NOSTR IDENTITY & ZAPS
             // ==========================================
             case 'set_nostr_identity': {
-                const parsed = SetNostrIdentitySchema.parse(args);
+                const parsed = SetNostrIdentitySchema.parse(args ?? {});
                 const result = await session.requireClient().setNostrIdentity(parsed.private_key);
                 return {
                     content: [
@@ -1513,7 +1513,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'nostr_zap': {
-                const parsed = NostrZapSchema.parse(args);
+                const parsed = NostrZapSchema.parse(args ?? {});
                 const result = await session.requireClient().nostrZap(parsed.address, parsed.amount_sats, parsed.recipient_pubkey, parsed.content, parsed.event_id, parsed.relays);
                 return {
                     content: [
@@ -1537,7 +1537,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 4: Advanced Agent Management
             // ==========================================
             case 'transfer_to_agent': {
-                const parsed = TransferToAgentSchema.parse(args);
+                const parsed = TransferToAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().transferToAgent(parsed.to_agent_id, parsed.amount_sats, parsed.from_agent_id);
                 return {
                     content: [
@@ -1555,7 +1555,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'delete_agent': {
-                const parsed = DeleteAgentSchema.parse(args);
+                const parsed = DeleteAgentSchema.parse(args ?? {});
                 if (!parsed.confirm) {
                     return {
                         content: [
@@ -1588,7 +1588,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // TIER 5: Protocol Extensions
             // ==========================================
             case 'lnurl_auth': {
-                const parsed = LnurlAuthSchema.parse(args);
+                const parsed = LnurlAuthSchema.parse(args ?? {});
                 const result = await session.requireClient().lnurlAuth(parsed.lnurl);
                 return {
                     content: [
@@ -1604,7 +1604,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'claim_lnurl_withdraw': {
-                const parsed = ClaimLnurlWithdrawSchema.parse(args);
+                const parsed = ClaimLnurlWithdrawSchema.parse(args ?? {});
                 const result = await session.requireClient().claimLnurlWithdraw(parsed.lnurl);
                 return {
                     content: [
@@ -1622,7 +1622,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'keysend': {
-                const parsed = KeysendSchema.parse(args);
+                const parsed = KeysendSchema.parse(args ?? {});
                 const result = await session.requireClient().keysend(parsed.destination, parsed.amount_sats, parsed.message);
                 return {
                     content: [
@@ -1646,7 +1646,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // MESSAGE BOARD TOOL HANDLERS
             // ==========================================
             case 'board_read': {
-                const parsed = BoardReadSchema.parse(args);
+                const parsed = BoardReadSchema.parse(args ?? {});
                 const result = await session.requireClient().boardRead(parsed.sort, parsed.topic, parsed.limit, parsed.offset);
                 return {
                     content: [
@@ -1658,7 +1658,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'board_post': {
-                const parsed = BoardPostSchema.parse(args);
+                const parsed = BoardPostSchema.parse(args ?? {});
                 const result = await session.requireClient().boardPost(parsed.content, parsed.topic);
                 return {
                     content: [
@@ -1670,7 +1670,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'board_reply': {
-                const parsed = BoardReplySchema.parse(args);
+                const parsed = BoardReplySchema.parse(args ?? {});
                 const result = await session.requireClient().boardReply(parsed.post_id, parsed.content);
                 return {
                     content: [
@@ -1682,7 +1682,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'board_vote': {
-                const parsed = BoardVoteSchema.parse(args);
+                const parsed = BoardVoteSchema.parse(args ?? {});
                 const result = await session.requireClient().boardVote(parsed.post_id, parsed.direction);
                 return {
                     content: [
