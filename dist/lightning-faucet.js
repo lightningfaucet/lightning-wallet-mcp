@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LightningFaucetClient = void 0;
 exports.registerOperator = registerOperator;
 exports.getPublicInfo = getPublicInfo;
+exports.getPublicDecodedInvoice = getPublicDecodedInvoice;
 const pre_payment_hook_js_1 = require("./pre-payment-hook.js");
 const bolt11_js_1 = require("./bolt11.js");
 const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
@@ -950,6 +951,36 @@ async function getPublicInfo() {
         maxPaymentSats: result.max_payment_sats || 1000000,
         minPaymentSats: result.min_payment_sats || 1,
         supportedFeatures: result.supported_features || ['l402', 'webhooks', 'lightning_address'],
+        rawResponse: result,
+    };
+}
+// Public invoice decode (no API key needed — the backend just parses the invoice)
+async function getPublicDecodedInvoice(bolt11) {
+    const response = await fetch(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decode_invoice', invoice: bolt11 }),
+    });
+    if (!response.ok) {
+        throw new Error(`Request failed (HTTP ${response.status})`);
+    }
+    const result = (await response.json());
+    if (!result.success) {
+        throw new Error(result.error || 'Unknown API error');
+    }
+    const amountSats = result.amount_sats || parseInt(result.num_satoshis || '0', 10);
+    const timestamp = result.timestamp ? parseInt(result.timestamp, 10) : 0;
+    const expiry = result.expiry ? parseInt(result.expiry, 10) : 3600;
+    const expiresAt = result.expires_at || new Date((timestamp + expiry) * 1000).toISOString();
+    const isExpired = result.is_expired ?? (timestamp + expiry < Date.now() / 1000);
+    return {
+        amountSats,
+        description: result.description || '',
+        paymentHash: result.payment_hash || '',
+        destination: result.destination || '',
+        expiresAt,
+        isExpired,
+        createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
         rawResponse: result,
     };
 }

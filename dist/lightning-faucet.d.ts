@@ -566,4 +566,14 @@ export declare function getPublicInfo(): Promise<{
     supportedFeatures: string[];
     rawResponse: ApiResponse;
 }>;
+export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
+    amountSats: number;
+    description: string;
+    paymentHash: string;
+    destination: string;
+    expiresAt: string;
+    isExpired: boolean;
+    createdAt?: string;
+    rawResponse: ApiResponse;
+}>;
 export {};

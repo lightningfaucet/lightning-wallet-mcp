@@ -581,7 +581,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'get_info',
-            description: 'Get service information including version, status, limits, and supported features.',
+            description: 'Get service information including version, status, limits, and supported features. No API key required — works before registering.',
             inputSchema: {
                 type: 'object',
                 properties: {},
@@ -590,7 +590,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'decode_invoice',
-            description: 'Decode a BOLT11 invoice without paying it. Returns amount, description, expiry, and destination.',
+            description: 'Decode a BOLT11 invoice without paying it. Returns amount, description, expiry, and destination. No API key required — works before registering.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -1353,7 +1353,13 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'decode_invoice': {
                 const parsed = DecodeInvoiceSchema.parse(args ?? {});
-                const result = await session.requireClient().decodeInvoice(parsed.bolt11);
+                // Invoice decoding is a public endpoint — fall back to an
+                // unauthenticated request so agents can inspect invoices before
+                // registering / configuring a key.
+                const decodeClient = session.getClient();
+                const result = decodeClient
+                    ? await decodeClient.decodeInvoice(parsed.bolt11)
+                    : await (0, lightning_faucet_js_1.getPublicDecodedInvoice)(parsed.bolt11);
                 return {
                     content: [
                         {

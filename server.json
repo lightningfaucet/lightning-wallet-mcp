@@ -8,12 +8,12 @@
     "url": "https://github.com/lightningfaucet/lightning-wallet-mcp",
     "source": "github"
   },
-  "version": "1.5.0",
+  "version": "1.5.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "lightning-wallet-mcp",
-      "version": "1.5.0",
+      "version": "1.5.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

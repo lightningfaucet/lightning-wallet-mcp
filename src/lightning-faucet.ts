@@ -1650,3 +1650,55 @@ export async function getPublicInfo(): Promise<{
     rawResponse: result,
   };
 }
+
+// Public invoice decode (no API key needed — the backend just parses the invoice)
+export async function getPublicDecodedInvoice(bolt11: string): Promise<{
+  amountSats: number;
+  description: string;
+  paymentHash: string;
+  destination: string;
+  expiresAt: string;
+  isExpired: boolean;
+  createdAt?: string;
+  rawResponse: ApiResponse;
+}> {
+  const response = await fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'decode_invoice', invoice: bolt11 }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+  const result = (await response.json()) as ApiResponse & {
+    amount_sats?: number;
+    num_satoshis?: string;
+    description?: string;
+    payment_hash?: string;
+    destination?: string;
+    timestamp?: string;
+    expiry?: string;
+    expires_at?: string;
+    is_expired?: boolean;
+  };
+  if (!result.success) {
+    throw new Error(result.error || 'Unknown API error');
+  }
+
+  const amountSats = result.amount_sats || parseInt(result.num_satoshis || '0', 10);
+  const timestamp = result.timestamp ? parseInt(result.timestamp, 10) : 0;
+  const expiry = result.expiry ? parseInt(result.expiry, 10) : 3600;
+  const expiresAt = result.expires_at || new Date((timestamp + expiry) * 1000).toISOString();
+  const isExpired = result.is_expired ?? (timestamp + expiry < Date.now() / 1000);
+
+  return {
+    amountSats,
+    description: result.description || '',
+    paymentHash: result.payment_hash || '',
+    destination: result.destination || '',
+    expiresAt,
+    isExpired,
+    createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
+    rawResponse: result,
+  };
+}

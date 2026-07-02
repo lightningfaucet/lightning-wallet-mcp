@@ -20,7 +20,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { LightningFaucetClient, registerOperator, getPublicInfo } from './lightning-faucet.js';
+import { LightningFaucetClient, registerOperator, getPublicInfo, getPublicDecodedInvoice } from './lightning-faucet.js';
 
 /**
  * Session state manager for the MCP server.
@@ -640,7 +640,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // ==========================================
     {
       name: 'get_info',
-      description: 'Get service information including version, status, limits, and supported features.',
+      description: 'Get service information including version, status, limits, and supported features. No API key required — works before registering.',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -649,7 +649,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'decode_invoice',
-      description: 'Decode a BOLT11 invoice without paying it. Returns amount, description, expiry, and destination.',
+      description: 'Decode a BOLT11 invoice without paying it. Returns amount, description, expiry, and destination. No API key required — works before registering.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1448,7 +1448,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'decode_invoice': {
         const parsed = DecodeInvoiceSchema.parse(args ?? {});
-        const result = await session.requireClient().decodeInvoice(parsed.bolt11);
+        // Invoice decoding is a public endpoint — fall back to an
+        // unauthenticated request so agents can inspect invoices before
+        // registering / configuring a key.
+        const decodeClient = session.getClient();
+        const result = decodeClient
+          ? await decodeClient.decodeInvoice(parsed.bolt11)
+          : await getPublicDecodedInvoice(parsed.bolt11);
         return {
           content: [
             {
