@@ -362,6 +362,11 @@ function cmdUseKey(positional, flags) {
     if (!key)
         error('Usage: lw use-key <api_key> [--agent]');
     const savedTo = flags.agent === true ? (0, credentials_js_1.saveAgentKey)(key, {}, true) : (0, credentials_js_1.saveOperatorKey)(key);
+    if (!savedTo) {
+        // Each lw invocation is a new process: a key that was not written to disk is gone by the
+        // next command, so claiming "active" here would be a lie.
+        error(`Could not save credentials to ${(0, credentials_js_1.credentialsPath)()} (persistence disabled or directory not writable). Use: export LIGHTNING_WALLET_API_KEY=${key}`);
+    }
     return { credentials_saved_to: savedTo, active: flags.agent === true ? 'agent' : 'operator' };
 }
 function cmdForget() {

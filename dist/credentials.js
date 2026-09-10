@@ -118,10 +118,15 @@ function writeCredentials(creds) {
 function base() {
     return loadCredentials() || { version: 1, active: 'operator' };
 }
-/** Save (and activate) an operator key. Returns the file path written, or null if not persisted. */
-function saveOperatorKey(apiKey, extra = {}) {
+/**
+ * Save (and activate) an operator key. Returns the file path written, or null if not persisted.
+ * Metadata (id, name, recovery_code) already on file is kept when the key is unchanged, or when
+ * `sameAccount` says the new key belongs to the same operator (key rotation). A different key
+ * without that flag is treated as a different account and starts clean.
+ */
+function saveOperatorKey(apiKey, extra = {}, opts = {}) {
     const creds = base();
-    const prev = creds.operator && creds.operator.api_key === apiKey ? creds.operator : undefined;
+    const prev = creds.operator && (creds.operator.api_key === apiKey || opts.sameAccount) ? creds.operator : undefined;
     creds.operator = {
         api_key: apiKey,
         id: extra.id ?? prev?.id,

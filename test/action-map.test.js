@@ -97,3 +97,25 @@ test('whoami refuses to guess a type', async () => {
     await assert.rejects(() => client.whoami(), /no identity type/);
   });
 });
+
+test('saveOperatorKey keeps recovery metadata on same-account rotation, drops it for a different account', () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-creds-'));
+  const prevHome = process.env.LIGHTNING_WALLET_HOME; process.env.LIGHTNING_WALLET_HOME = home;
+  try {
+    const c = require('../dist/credentials.js');
+    c.saveOperatorKey('lf_first', { id: 7, name: 'me', recovery_code: 'rc-123' });
+    c.saveOperatorKey('lf_rotated', {}, { sameAccount: true });
+    let on = c.loadCredentials();
+    assert.equal(on.operator.api_key, 'lf_rotated');
+    assert.equal(on.operator.recovery_code, 'rc-123');
+    assert.equal(on.operator.id, 7);
+    c.saveOperatorKey('lf_other_account');
+    on = c.loadCredentials();
+    assert.equal(on.operator.api_key, 'lf_other_account');
+    assert.equal(on.operator.recovery_code, undefined);
+  } finally {
+    if (prevHome === undefined) delete process.env.LIGHTNING_WALLET_HOME; else process.env.LIGHTNING_WALLET_HOME = prevHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

@@ -1407,9 +1407,10 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 // Auto-switch to the new key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
                 session.keySource = 'file';
+                // Rotation is the same account: carry the stored id, name and recovery code forward.
                 const rotSavedTo = parsed.agent_id
                     ? (0, credentials_js_1.saveAgentKey)(result.apiKey, { id: parsed.agent_id }, true)
-                    : (0, credentials_js_1.saveOperatorKey)(result.apiKey);
+                    : (0, credentials_js_1.saveOperatorKey)(result.apiKey, {}, { sameAccount: true });
                 return {
                     content: [
                         {

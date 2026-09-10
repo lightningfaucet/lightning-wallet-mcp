@@ -22,11 +22,18 @@ export declare function activeStoredKey(creds: CredentialsFile | null): {
     api_key: string;
     type: 'operator' | 'agent';
 } | null;
-/** Save (and activate) an operator key. Returns the file path written, or null if not persisted. */
+/**
+ * Save (and activate) an operator key. Returns the file path written, or null if not persisted.
+ * Metadata (id, name, recovery_code) already on file is kept when the key is unchanged, or when
+ * `sameAccount` says the new key belongs to the same operator (key rotation). A different key
+ * without that flag is treated as a different account and starts clean.
+ */
 export declare function saveOperatorKey(apiKey: string, extra?: {
     id?: number;
     name?: string;
     recovery_code?: string;
+}, opts?: {
+    sameAccount?: boolean;
 }): string | null;
 /** Save an agent key. Activates it only when `activate` is true (set_agent_credentials); create_agent just records it. */
 export declare function saveAgentKey(apiKey: string, extra?: {
