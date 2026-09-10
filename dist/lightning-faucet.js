@@ -5,13 +5,49 @@
  * Handles communication with the Lightning Faucet AI Agent Wallet API.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LightningFaucetClient = void 0;
+exports.LightningFaucetClient = exports.ApiError = void 0;
+exports.fetchWithTimeout = fetchWithTimeout;
 exports.registerOperator = registerOperator;
 exports.getPublicInfo = getPublicInfo;
 exports.getPublicDecodedInvoice = getPublicDecodedInvoice;
 const pre_payment_hook_js_1 = require("./pre-payment-hook.js");
 const bolt11_js_1 = require("./bolt11.js");
+const node_crypto_1 = require("node:crypto");
 const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
+/**
+ * Request timeout. The lightningfaucet.com proxy caps the backend at 30s, so 45s is long
+ * enough for a slow Lightning payment to report back (including pending:true) while still
+ * guaranteeing the MCP tool call never hangs forever on a dead connection.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.LIGHTNING_WALLET_TIMEOUT_MS) || 45_000;
+async function fetchWithTimeout(url, init) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    }
+    catch (err) {
+        if (err?.name === 'AbortError') {
+            throw new Error(`Request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s. If this was a payment, check get_transactions before retrying: it may still be in flight.`);
+        }
+        throw err;
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
+/** API-level failure that preserves the backend's structured response (e.g. pending:true). */
+class ApiError extends Error {
+    response;
+    pending;
+    constructor(message, response) {
+        super(message);
+        this.name = 'ApiError';
+        this.response = response;
+        this.pending = response.pending === true;
+    }
+}
+exports.ApiError = ApiError;
 function safeStringify(value) {
     try {
         return JSON.stringify(value);
@@ -40,7 +76,8 @@ class LightningFaucetClient {
         }
         try {
             const who = await this.whoami();
-            this.agentIdCache = who.id || null;
+            // Only an agent key has an agent id; an operator id must not be passed off as one.
+            this.agentIdCache = who.type === 'agent' ? (who.id || null) : null;
         }
         catch {
             this.agentIdCache = null;
@@ -63,7 +100,7 @@ class LightningFaucetClient {
         }
         const agentId = await this.resolveAgentId();
         const proposal = {
-            proposal_id: globalThis.crypto.randomUUID(),
+            proposal_id: (0, node_crypto_1.randomUUID)(),
             agent_id: agentId,
             protocol: params.protocol,
             destination_or_url: params.destinationOrUrl,
@@ -87,7 +124,7 @@ class LightningFaucetClient {
             api_key: this.apiKey,
             ...data,
         };
-        const response = await fetch(API_BASE_URL, {
+        const response = await fetchWithTimeout(API_BASE_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -100,7 +137,9 @@ class LightningFaucetClient {
         }
         const result = await response.json();
         if (!result.success) {
-            throw new Error(result.error || 'Unknown API error');
+            // Keep the structured response: payment paths return pending:true when an HTLC is
+            // still in flight, and callers must NOT retry those.
+            throw new ApiError(result.error || 'Unknown API error', result);
         }
         return result;
     }
@@ -344,8 +383,11 @@ class LightningFaucetClient {
      */
     async whoami() {
         const result = await this.request('whoami');
+        if (result.type !== 'operator' && result.type !== 'agent') {
+            throw new Error('whoami returned no identity type');
+        }
         return {
-            type: result.type || 'agent',
+            type: result.type,
             id: result.id || 0,
             name: result.name || 'Unknown',
             balanceSats: result.balance_sats || 0,
@@ -450,9 +492,9 @@ class LightningFaucetClient {
      * Set budget limit for an agent
      */
     async setBudget(agentId, budgetLimitSats) {
-        const result = await this.request('update_agent', {
+        const result = await this.request('set_budget', {
             agent_id: agentId,
-            updates: { budget_limit_sats: budgetLimitSats === 0 ? null : budgetLimitSats },
+            budget_limit_sats: budgetLimitSats, // backend: 0 = unlimited
         });
         return {
             agentId: result.agent_id || agentId,
@@ -636,13 +678,12 @@ class LightningFaucetClient {
      * Sweep funds from agent back to operator
      */
     async sweepAgent(agentId, amountSats) {
-        const result = await this.request('withdraw_from_agent', {
-            agent_id: agentId,
-            amount_sats: amountSats,
-            sweep: true,
-        });
+        const result = await this.request('withdraw_from_agent', amountSats === 'all'
+            ? { agent_id: agentId, sweep: true }
+            // Partial sweep: do NOT send sweep:true, the backend honours it before amount_sats.
+            : { agent_id: agentId, amount_sats: amountSats });
         return {
-            amountTransferred: result.amount_transferred || amountSats,
+            amountTransferred: result.amount_transferred || (amountSats === 'all' ? 0 : amountSats),
             newOperatorBalance: result.new_operator_balance || 0,
             newAgentBalance: result.new_agent_balance || 0,
             rawResponse: result,
@@ -666,9 +707,17 @@ class LightningFaucetClient {
         if (comment)
             data.comment = comment;
         const result = await this.request('pay_lightning_address', data);
+        // Backend settles through payInvoice, which reports routing_fee_sats + platform_fee_sats
+        // (there is no fee_sats key). Sum them so the model sees the real cost.
+        const routingFeeSats = result.routing_fee_sats || 0;
+        const platformFeeSats = result.platform_fee_sats || 0;
         return {
             amountSats: result.amount_sats || amountSats,
-            feeSats: result.fee_sats || 0,
+            feeSats: result.fee_sats ?? (routingFeeSats + platformFeeSats),
+            routingFeeSats,
+            platformFeeSats,
+            totalCostSats: result.total_cost || (result.amount_sats || amountSats) + routingFeeSats + platformFeeSats,
+            preimage: result.preimage || result.payment_preimage || '',
             paymentHash: result.payment_hash || '',
             newBalance: result.new_balance || 0,
             rawResponse: result,
@@ -831,7 +880,7 @@ class LightningFaucetClient {
         const result = await this.request('nostr_zap', data);
         return {
             amountSats: result.amount_sats || amountSats,
-            feeSats: result.fee_sats || 0,
+            feeSats: result.fee_sats ?? ((result.routing_fee_sats || 0) + (result.platform_fee_sats || 0)),
             paymentHash: result.payment_hash || '',
             newBalance: result.new_balance || 0,
             zapType: result.zap_type || 'fallback',

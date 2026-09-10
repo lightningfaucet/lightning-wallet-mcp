@@ -9,7 +9,9 @@
  *   Get an API key at: https://lightningfaucet.com/ai-agents/
  *
  * Usage with Claude Code:
- *   Add to .claude/settings.json mcpServers with command "npx lightning-wallet-mcp"
- *   and set LIGHTNING_WALLET_API_KEY in the env block.
+ *   claude mcp add lightning-wallet -- npx -y lightning-wallet-mcp
+ *   (or add it to .mcp.json). No key needed up front: register_operator saves credentials to
+ *   ~/.lightning-wallet/credentials.json and they are reused automatically in later sessions.
+ *   LIGHTNING_WALLET_API_KEY, when set, always takes precedence over the saved file.
  */
 export {};

@@ -3,6 +3,13 @@
  *
  * Handles communication with the Lightning Faucet AI Agent Wallet API.
  */
+export declare function fetchWithTimeout(url: string, init: RequestInit): Promise<Response>;
+/** API-level failure that preserves the backend's structured response (e.g. pending:true). */
+export declare class ApiError extends Error {
+    readonly response: ApiResponse & Record<string, unknown>;
+    readonly pending: boolean;
+    constructor(message: string, response: ApiResponse);
+}
 interface ApiResponse {
     success: boolean;
     error?: string;
@@ -422,7 +429,7 @@ export declare class LightningFaucetClient {
     /**
      * Sweep funds from agent back to operator
      */
-    sweepAgent(agentId: number, amountSats: number): Promise<{
+    sweepAgent(agentId: number, amountSats: number | 'all'): Promise<{
         amountTransferred: number;
         newOperatorBalance: number;
         newAgentBalance: number;
@@ -434,6 +441,10 @@ export declare class LightningFaucetClient {
     payLightningAddress(address: string, amountSats: number, comment?: string): Promise<{
         amountSats: number;
         feeSats: number;
+        routingFeeSats: number;
+        platformFeeSats: number;
+        totalCostSats: number;
+        preimage: string;
         paymentHash: string;
         newBalance: number;
         rawResponse: ApiResponse;
