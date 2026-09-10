@@ -10,8 +10,10 @@
  *   Get an API key at: https://lightningfaucet.com/ai-agents/
  *
  * Usage with Claude Code:
- *   Add to .claude/settings.json mcpServers with command "npx lightning-wallet-mcp"
- *   and set LIGHTNING_WALLET_API_KEY in the env block.
+ *   claude mcp add lightning-wallet -- npx -y lightning-wallet-mcp
+ *   (or add it to .mcp.json). No key needed up front: register_operator saves credentials to
+ *   ~/.lightning-wallet/credentials.json and they are reused automatically in later sessions.
+ *   LIGHTNING_WALLET_API_KEY, when set, always takes precedence over the saved file.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
@@ -19,6 +21,16 @@ const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const zod_1 = require("zod");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
+const credentials_js_1 = require("./credentials.js");
+// Package is built as CommonJS, so a plain require resolves ../package.json at runtime.
+const PKG_VERSION = (() => {
+    try {
+        return require('../package.json').version;
+    }
+    catch {
+        return '0.0.0';
+    }
+})();
 /**
  * Session state manager for the MCP server.
  *
@@ -29,10 +41,21 @@ const lightning_faucet_js_1 = require("./lightning-faucet.js");
  */
 class SessionState {
     client = null;
+    /** Where the startup key came from; surfaced in whoami for debuggability. */
+    keySource = 'none';
     constructor() {
         const apiKey = process.env.LIGHTNING_WALLET_API_KEY;
         if (apiKey) {
             this.client = new lightning_faucet_js_1.LightningFaucetClient(apiKey);
+            this.keySource = 'env';
+            return;
+        }
+        // No env key: fall back to credentials persisted by a previous session
+        // (register_operator / set_operator_key / set_agent_credentials write them).
+        const stored = (0, credentials_js_1.activeStoredKey)((0, credentials_js_1.loadCredentials)());
+        if (stored) {
+            this.client = new lightning_faucet_js_1.LightningFaucetClient(stored.api_key);
+            this.keySource = 'file';
         }
     }
     getClient() {
@@ -43,7 +66,7 @@ class SessionState {
     }
     requireClient() {
         if (!this.client) {
-            throw new Error('No API key configured. Use set_operator_key or set_agent_credentials first, or set LIGHTNING_WALLET_API_KEY environment variable.');
+            throw new Error('No API key configured. Call register_operator to create a wallet (credentials are saved for future sessions), or set_operator_key / set_agent_credentials with an existing key, or set the LIGHTNING_WALLET_API_KEY environment variable.');
         }
         return this.client;
     }
@@ -69,7 +92,7 @@ function sanitizeErrorMessage(message) {
 // Create MCP server
 const server = new index_js_1.Server({
     name: 'lightning-wallet',
-    version: '1.0.0',
+    version: PKG_VERSION,
 }, {
     capabilities: {
         tools: {},
@@ -84,8 +107,20 @@ const PayL402ApiSchema = zod_1.z.object({
     max_payment_sats: zod_1.z.number().min(1).max(100000).default(1000)
         .describe('Maximum amount in satoshis to pay for this request'),
 });
+/**
+ * BOLT11 input: trims whitespace, strips a `lightning:` URI prefix (what most wallets put on
+ * the clipboard), and accepts every network prefix (mainnet bc, testnet tb, signet tbs/sb, regtest bcrt).
+ * Bech32 is case-insensitive, so uppercase invoices are fine.
+ */
+function bolt11String() {
+    return zod_1.z
+        .string()
+        .trim()
+        .transform((v) => v.replace(/^lightning:/i, '').trim())
+        .refine((v) => /^ln[a-z]{2,5}[0-9]*[munp]?1[a-z0-9]{50,}$/i.test(v), { message: 'Invalid BOLT11 invoice format' });
+}
 const PayInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    bolt11: bolt11String()
         .describe('BOLT11 invoice string to pay (starts with lnbc...)'),
     max_fee_sats: zod_1.z.number().min(0).optional()
         .describe('Maximum routing fee in satoshis (default: 10% of invoice amount)'),
@@ -173,13 +208,13 @@ const RotateApiKeySchema = zod_1.z.object({
 // Tier 2 schemas
 const GetInfoSchema = zod_1.z.object({});
 const DecodeInvoiceSchema = zod_1.z.object({
-    bolt11: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    bolt11: bolt11String()
         .describe('BOLT11 invoice string to decode'),
 });
 const GetRateLimitsSchema = zod_1.z.object({});
 // Tier 3 schemas
 const WithdrawSchema = zod_1.z.object({
-    invoice: zod_1.z.string().regex(/^ln(bc|tb|bcrt)([0-9]+[munp]?)?1[a-z0-9]+$/i, 'Invalid BOLT11 invoice format')
+    invoice: bolt11String()
         .describe('BOLT11 invoice to pay out to'),
 });
 const SweepAgentSchema = zod_1.z.object({
@@ -263,7 +298,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'pay_l402_api',
-            description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. REQUIRES AGENT KEY.',
+            description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -288,7 +323,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'pay_invoice',
-            description: 'Pay a BOLT11 Lightning invoice from the agent balance. Returns preimage as proof of payment. REQUIRES AGENT KEY.',
+            description: 'Pay a BOLT11 Lightning invoice. Returns the preimage as proof of payment. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key. If the response says pending:true the payment is still in flight: do NOT retry, check get_transactions instead.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -296,7 +331,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                     max_fee_sats: {
                         type: 'integer',
                         minimum: 0,
-                        description: 'Maximum routing fee in satoshis',
+                        description: 'Maximum routing fee in satoshis (backend default: 100 for agent keys, 10 for operator keys; unused reserve is refunded)',
                     },
                 },
                 required: ['bolt11'],
@@ -452,6 +487,15 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         // TIER 1: Webhook Management (Agent context)
         // ==========================================
+        {
+            name: 'forget_credentials',
+            description: 'Delete the locally saved credentials file (~/.lightning-wallet/credentials.json). The wallet itself is untouched; keep the API key or recovery code to get back in. Use this before handing the machine to someone else.',
+            inputSchema: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
         {
             name: 'register_webhook',
             description: 'Register a webhook URL to receive payment notifications. Max 5 webhooks per agent. REQUIRES AGENT KEY.',
@@ -613,7 +657,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'withdraw',
-            description: 'Withdraw funds from operator account to external Lightning invoice. REQUIRES OPERATOR KEY. Subject to security cooldown.',
+            description: 'Withdraw funds from the operator account to an external Lightning invoice (minimum 10 sats; 1% platform fee, none under 100 sats; unused routing reserve refunded). REQUIRES OPERATOR KEY. Subject to a security cooldown after key rotation.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -624,11 +668,11 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'create_withdraw_link',
-            description: 'Create an LNURL-withdraw link for the operator to receive funds. Opens in browser for QR code scanning with any Lightning wallet. Omit amount_sats to sweep full balance. REQUIRES OPERATOR KEY.',
+            description: 'Create an LNURL-withdraw link for the operator to receive funds. Opens in browser for QR code scanning with any Lightning wallet. Omit amount_sats to sweep full balance (minimum 10 sats after fees). REQUIRES OPERATOR KEY.',
             inputSchema: {
                 type: 'object',
                 properties: {
-                    amount_sats: { type: 'integer', minimum: 100, description: 'Amount in sats to withdraw (omit to sweep full balance)' },
+                    amount_sats: { type: 'integer', minimum: 10, description: 'Amount in sats to withdraw (omit to sweep full balance)' },
                 },
             },
         },
@@ -639,14 +683,20 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                 type: 'object',
                 properties: {
                     agent_id: { type: 'integer', description: 'Agent ID to sweep funds from' },
-                    amount_sats: { type: 'integer', description: 'Amount in sats (use large number for full balance)' },
+                    amount_sats: {
+                        oneOf: [
+                            { type: 'integer', minimum: 1, description: 'Amount in sats to move back to the operator' },
+                            { type: 'string', enum: ['all'], description: 'Sweep the full agent balance' },
+                        ],
+                        description: 'Amount in sats, or the string "all" to sweep the full balance',
+                    },
                 },
                 required: ['agent_id', 'amount_sats'],
             },
         },
         {
             name: 'pay_lightning_address',
-            description: 'Pay to a Lightning address (user@domain.com format). REQUIRES AGENT KEY.',
+            description: 'Pay to a Lightning address (user@domain.com format). Works with an operator key (pays from the operator wallet) or an agent key.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -857,6 +907,12 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 if (result.paymentProtocol) {
                     responseData.payment_protocol = result.paymentProtocol;
                 }
+                // Operator-key payments run through a transient default agent on the backend; surface that.
+                const l402Raw = result.rawResponse;
+                for (const k of ['via_agent_id', 'default_agent_created', 'returned_to_operator_sats']) {
+                    if (l402Raw && l402Raw[k] !== undefined)
+                        responseData[k] = l402Raw[k];
+                }
                 if (result.usdcAmount !== undefined) {
                     responseData.usdc_amount = result.usdcAmount;
                 }
@@ -886,6 +942,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 total_cost: result.totalCost,
                                 payment_hash: result.paymentHash,
                                 new_balance: result.newBalance,
+                                ...((result.rawResponse?.default_agent_created !== undefined) ? { default_agent_created: true } : {}),
+                                ...((result.rawResponse?.returned_to_operator_sats !== undefined) ? { returned_to_operator_sats: result.rawResponse.returned_to_operator_sats } : {}),
                             }, null, 2),
                         },
                     ],
@@ -956,17 +1014,26 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const result = await (0, lightning_faucet_js_1.registerOperator)(parsed.name, parsed.email);
                 // Auto-set credentials so subsequent requests use the new operator key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
+                session.keySource = 'file';
+                const savedTo = (0, credentials_js_1.saveOperatorKey)(result.apiKey, {
+                    id: result.operatorId,
+                    name: parsed.name,
+                    recovery_code: result.recoveryCode,
+                });
                 return {
                     content: [
                         {
                             type: 'text',
                             text: JSON.stringify({
                                 success: true,
-                                message: 'Operator registered successfully. Credentials are now active for this session. SAVE THESE CREDENTIALS!',
+                                message: savedTo
+                                    ? `Operator registered. Credentials are active now and were saved to ${savedTo}, so future sessions reuse this wallet automatically. Do NOT register again.`
+                                    : 'Operator registered. Credentials are active for this session only (persistence disabled or unwritable). SAVE THESE CREDENTIALS!',
                                 operator_id: result.operatorId,
                                 api_key: result.apiKey,
                                 recovery_code: result.recoveryCode,
-                                warning: 'Store these securely - they cannot be retrieved later!',
+                                credentials_saved_to: savedTo,
+                                warning: 'Keep the recovery code somewhere safe. It is the only way back in if the credentials file is lost.',
                                 tip: 'Set up a webhook to get real-time notifications for payments and balance changes. Use the register_webhook tool with a public URL (ngrok makes this easy: npx ngrok http 3000).',
                             }, null, 2),
                         },
@@ -1028,6 +1095,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'create_agent': {
                 const parsed = CreateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
+                const agentSavedTo = (0, credentials_js_1.saveAgentKey)(result.agentApiKey, { id: result.agentId, name: result.name }, false);
                 return {
                     content: [
                         {
@@ -1038,6 +1106,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 agent_id: result.agentId,
                                 api_key: result.agentApiKey,
                                 name: result.name,
+                                credentials_saved_to: agentSavedTo,
+                                tip: 'You can keep using the operator key: pay_invoice, pay_l402_api and pay_lightning_address work from the operator wallet directly. Switch with set_agent_credentials only if you want per-agent budgets.',
                             }, null, 2),
                         },
                     ],
@@ -1077,9 +1147,31 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     ],
                 };
             }
+            case 'forget_credentials': {
+                const removed = (0, credentials_js_1.forgetCredentials)();
+                session.setClient(null);
+                session.keySource = 'none';
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify({
+                                success: true,
+                                removed,
+                                path: (0, credentials_js_1.credentialsPath)(),
+                                message: removed
+                                    ? 'Saved credentials deleted. This session no longer has a key; register_operator or set_operator_key to continue.'
+                                    : 'No saved credentials file was present. This session no longer has a key.',
+                            }, null, 2),
+                        },
+                    ],
+                };
+            }
             case 'set_operator_key': {
                 const parsed = SetOperatorKeySchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
+                session.keySource = 'file';
+                const opSavedTo = (0, credentials_js_1.saveOperatorKey)(parsed.api_key);
                 return {
                     content: [
                         {
@@ -1087,6 +1179,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                             text: JSON.stringify({
                                 success: true,
                                 message: 'Switched to operator credentials. Subsequent requests will use this API key.',
+                                credentials_saved_to: opSavedTo,
                             }, null, 2),
                         },
                     ],
@@ -1095,6 +1188,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'set_agent_credentials': {
                 const parsed = SetAgentCredentialsSchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
+                session.keySource = 'file';
+                const agSavedTo = (0, credentials_js_1.saveAgentKey)(parsed.api_key, {}, true);
                 return {
                     content: [
                         {
@@ -1102,6 +1197,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                             text: JSON.stringify({
                                 success: true,
                                 message: 'Switched to agent credentials. Subsequent requests will use this API key.',
+                                credentials_saved_to: agSavedTo,
                             }, null, 2),
                         },
                     ],
@@ -1116,6 +1212,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     id: result.id,
                     name: result.name,
                     balance_sats: result.balanceSats,
+                    key_source: session.keySource,
+                    credentials: (0, credentials_js_1.describeCredentials)(),
                 };
                 if (result.type === 'operator') {
                     response.agent_count = result.agentCount;
@@ -1281,11 +1379,12 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             // ==========================================
             case 'recover_account': {
                 const parsed = RecoverAccountSchema.parse(args ?? {});
-                // Recovery doesn't need an existing API key — recoverAccount() uses its own fetch
-                const tempClient = session.getClient() || new lightning_faucet_js_1.LightningFaucetClient('recovery-placeholder');
-                const result = await tempClient.recoverAccount(parsed.recovery_code);
+                // Recovery is unauthenticated: no client (and no placeholder key) is needed.
+                const result = await (0, lightning_faucet_js_1.recoverOperatorAccount)(parsed.recovery_code);
                 // Auto-switch to the new key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
+                session.keySource = 'file';
+                const recSavedTo = (0, credentials_js_1.saveOperatorKey)(result.apiKey, { id: result.operatorId, recovery_code: parsed.recovery_code });
                 return {
                     content: [
                         {
@@ -1296,6 +1395,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 operator_id: result.operatorId,
                                 new_api_key: result.apiKey,
                                 cooldown_until: result.cooldownUntil,
+                                credentials_saved_to: recSavedTo,
                             }, null, 2),
                         },
                     ],
@@ -1306,6 +1406,10 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const result = await session.requireClient().rotateApiKey(parsed.agent_id);
                 // Auto-switch to the new key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
+                session.keySource = 'file';
+                const rotSavedTo = parsed.agent_id
+                    ? (0, credentials_js_1.saveAgentKey)(result.apiKey, { id: parsed.agent_id }, true)
+                    : (0, credentials_js_1.saveOperatorKey)(result.apiKey);
                 return {
                     content: [
                         {
@@ -1315,6 +1419,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 message: result.message || 'API key rotated. New key is now active.',
                                 new_api_key: result.apiKey,
                                 cooldown_until: result.cooldownUntil,
+                                credentials_saved_to: rotSavedTo,
                             }, null, 2),
                         },
                     ],
@@ -1421,7 +1526,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'create_withdraw_link': {
                 const { amount_sats: amountSats } = zod_1.z.object({
-                    amount_sats: zod_1.z.coerce.number().int().min(100).optional(),
+                    amount_sats: zod_1.z.coerce.number().int().min(10).optional(),
                 }).parse(args ?? {});
                 const result = await session.requireClient().createWithdrawLink(amountSats);
                 return {
@@ -1446,7 +1551,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'sweep_agent': {
                 const parsed = SweepAgentSchema.parse(args ?? {});
-                const amount = typeof parsed.amount_sats === 'string' ? 999999999 : parsed.amount_sats;
+                const amount = typeof parsed.amount_sats === 'string' ? 'all' : parsed.amount_sats;
                 const result = await session.requireClient().sweepAgent(parsed.agent_id, amount);
                 return {
                     content: [
@@ -1715,6 +1820,42 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
         const rawMessage = error instanceof Error ? error.message : 'Unknown error';
         // Sanitize error messages: strip HTTP details, internal paths, and stack traces
         const errorMessage = sanitizeErrorMessage(rawMessage);
+        if (error instanceof lightning_faucet_js_1.ApiError && error.pending) {
+            // An in-flight Lightning payment is a STATE, not a failure. Return it without isError so
+            // the model does not treat it as a retryable error (retrying could double-spend).
+            const r = error.response;
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            success: false,
+                            pending: true,
+                            payment_hash: r.payment_hash ?? null,
+                            error: errorMessage,
+                            instruction: 'Do NOT retry this payment. Wait, then check get_transactions or get_invoice_status; the balance is reconciled automatically once the payment settles or fails.',
+                        }, null, 2),
+                    },
+                ],
+            };
+        }
+        if (error instanceof lightning_faucet_js_1.ApiError) {
+            const r = error.response;
+            const extra = {};
+            for (const k of ['hint', 'cooldown_until', 'seconds_remaining', 'required', 'available', 'balance_sats', 'shortfall_sats', 'min_amount_sats']) {
+                if (r[k] !== undefined)
+                    extra[k] = r[k];
+            }
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({ success: false, error: errorMessage, ...extra }, null, 2),
+                    },
+                ],
+                isError: true,
+            };
+        }
         return {
             content: [
                 {

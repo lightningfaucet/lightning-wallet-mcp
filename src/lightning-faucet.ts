@@ -12,7 +12,43 @@ import {
 } from './pre-payment-hook.js';
 import { bolt11AmountSats } from './bolt11.js';
 
+import { randomUUID } from 'node:crypto';
+
 const API_BASE_URL = process.env.LIGHTNING_WALLET_API_URL || 'https://lightningfaucet.com/ai-agents/api';
+
+/**
+ * Request timeout. The lightningfaucet.com proxy caps the backend at 30s, so 45s is long
+ * enough for a slow Lightning payment to report back (including pending:true) while still
+ * guaranteeing the MCP tool call never hangs forever on a dead connection.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.LIGHTNING_WALLET_TIMEOUT_MS) || 45_000;
+
+export async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err: unknown) {
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s. If this was a payment, check get_transactions before retrying: it may still be in flight.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** API-level failure that preserves the backend's structured response (e.g. pending:true). */
+export class ApiError extends Error {
+  readonly response: ApiResponse & Record<string, unknown>;
+  readonly pending: boolean;
+  constructor(message: string, response: ApiResponse) {
+    super(message);
+    this.name = 'ApiError';
+    this.response = response as ApiResponse & Record<string, unknown>;
+    this.pending = (response as { pending?: unknown }).pending === true;
+  }
+}
 
 function safeStringify(value: unknown): string {
   try {
@@ -180,7 +216,8 @@ export class LightningFaucetClient {
     }
     try {
       const who = await this.whoami();
-      this.agentIdCache = who.id || null;
+      // Only an agent key has an agent id; an operator id must not be passed off as one.
+      this.agentIdCache = who.type === 'agent' ? (who.id || null) : null;
     } catch {
       this.agentIdCache = null;
     }
@@ -210,7 +247,7 @@ export class LightningFaucetClient {
 
     const agentId = await this.resolveAgentId();
     const proposal: PrePaymentProposal = {
-      proposal_id: globalThis.crypto.randomUUID(),
+      proposal_id: randomUUID(),
       agent_id: agentId,
       protocol: params.protocol,
       destination_or_url: params.destinationOrUrl,
@@ -240,7 +277,7 @@ export class LightningFaucetClient {
       ...data,
     };
 
-    const response = await fetch(API_BASE_URL, {
+    const response = await fetchWithTimeout(API_BASE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -256,7 +293,9 @@ export class LightningFaucetClient {
     const result = await response.json() as T;
 
     if (!result.success) {
-      throw new Error(result.error || 'Unknown API error');
+      // Keep the structured response: payment paths return pending:true when an HTLC is
+      // still in flight, and callers must NOT retry those.
+      throw new ApiError(result.error || 'Unknown API error', result);
     }
 
     return result;
@@ -638,9 +677,12 @@ export class LightningFaucetClient {
     rawResponse: WhoamiResponse;
   }> {
     const result = await this.request<WhoamiResponse>('whoami');
+    if (result.type !== 'operator' && result.type !== 'agent') {
+      throw new Error('whoami returned no identity type');
+    }
 
     return {
-      type: result.type || 'agent',
+      type: result.type,
       id: result.id || 0,
       name: result.name || 'Unknown',
       balanceSats: result.balance_sats || 0,
@@ -821,9 +863,9 @@ export class LightningFaucetClient {
     const result = await this.request<ApiResponse & {
       agent_id?: number;
       budget_limit_sats?: number;
-    }>('update_agent', {
+    }>('set_budget', {
       agent_id: agentId,
-      updates: { budget_limit_sats: budgetLimitSats === 0 ? null : budgetLimitSats },
+      budget_limit_sats: budgetLimitSats, // backend: 0 = unlimited
     });
 
     return {
@@ -891,36 +933,7 @@ export class LightningFaucetClient {
     cooldownUntil?: string;
     rawResponse: ApiResponse;
   }> {
-    // Recovery doesn't need auth, so we make a direct request
-    const response = await fetch(API_BASE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'recover',
-        recovery_code: recoveryCode,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Request failed (HTTP ${response.status})`);
-    }
-
-    const result = await response.json() as ApiResponse & {
-      operator_id?: number;
-      api_key?: string;
-      cooldown_until?: string;
-    };
-
-    if (!result.success) {
-      throw new Error(result.error || 'Recovery failed');
-    }
-
-    return {
-      operatorId: result.operator_id || 0,
-      apiKey: result.api_key || '',
-      cooldownUntil: result.cooldown_until,
-      rawResponse: result,
-    };
+    return recoverOperatorAccount(recoveryCode);
   }
 
   /**
@@ -1141,7 +1154,7 @@ export class LightningFaucetClient {
   /**
    * Sweep funds from agent back to operator
    */
-  async sweepAgent(agentId: number, amountSats: number): Promise<{
+  async sweepAgent(agentId: number, amountSats: number | 'all'): Promise<{
     amountTransferred: number;
     newOperatorBalance: number;
     newAgentBalance: number;
@@ -1151,14 +1164,13 @@ export class LightningFaucetClient {
       amount_transferred?: number;
       new_operator_balance?: number;
       new_agent_balance?: number;
-    }>('withdraw_from_agent', {
-      agent_id: agentId,
-      amount_sats: amountSats,
-      sweep: true,
-    });
+    }>('withdraw_from_agent', amountSats === 'all'
+      ? { agent_id: agentId, sweep: true }
+      // Partial sweep: do NOT send sweep:true, the backend honours it before amount_sats.
+      : { agent_id: agentId, amount_sats: amountSats });
 
     return {
-      amountTransferred: result.amount_transferred || amountSats,
+      amountTransferred: result.amount_transferred || (amountSats === 'all' ? 0 : amountSats),
       newOperatorBalance: result.new_operator_balance || 0,
       newAgentBalance: result.new_agent_balance || 0,
       rawResponse: result,
@@ -1175,6 +1187,10 @@ export class LightningFaucetClient {
   ): Promise<{
     amountSats: number;
     feeSats: number;
+    routingFeeSats: number;
+    platformFeeSats: number;
+    totalCostSats: number;
+    preimage: string;
     paymentHash: string;
     newBalance: number;
     rawResponse: ApiResponse;
@@ -1196,13 +1212,26 @@ export class LightningFaucetClient {
     const result = await this.request<ApiResponse & {
       amount_sats?: number;
       fee_sats?: number;
+      routing_fee_sats?: number;
+      platform_fee_sats?: number;
+      total_cost?: number;
+      preimage?: string;
+      payment_preimage?: string;
       payment_hash?: string;
       new_balance?: number;
     }>('pay_lightning_address', data);
 
+    // Backend settles through payInvoice, which reports routing_fee_sats + platform_fee_sats
+    // (there is no fee_sats key). Sum them so the model sees the real cost.
+    const routingFeeSats = result.routing_fee_sats || 0;
+    const platformFeeSats = result.platform_fee_sats || 0;
     return {
       amountSats: result.amount_sats || amountSats,
-      feeSats: result.fee_sats || 0,
+      feeSats: result.fee_sats ?? (routingFeeSats + platformFeeSats),
+      routingFeeSats,
+      platformFeeSats,
+      totalCostSats: result.total_cost || (result.amount_sats || amountSats) + routingFeeSats + platformFeeSats,
+      preimage: result.preimage || result.payment_preimage || '',
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
       rawResponse: result,
@@ -1469,6 +1498,8 @@ export class LightningFaucetClient {
     const result = await this.request<ApiResponse & {
       amount_sats?: number;
       fee_sats?: number;
+      routing_fee_sats?: number;
+      platform_fee_sats?: number;
       payment_hash?: string;
       new_balance?: number;
       zap_type?: 'nip57' | 'fallback';
@@ -1476,7 +1507,7 @@ export class LightningFaucetClient {
 
     return {
       amountSats: result.amount_sats || amountSats,
-      feeSats: result.fee_sats || 0,
+      feeSats: result.fee_sats ?? ((result.routing_fee_sats || 0) + (result.platform_fee_sats || 0)),
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
       zapType: result.zap_type || 'fallback',
@@ -1699,6 +1730,48 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
     expiresAt,
     isExpired,
     createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
+    rawResponse: result,
+  };
+}
+
+/**
+ * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
+ * outside the client class: callers must not need an API key to construct anything.
+ */
+export async function recoverOperatorAccount(recoveryCode: string): Promise<{
+  operatorId: number;
+  apiKey: string;
+  cooldownUntil?: string;
+  rawResponse: ApiResponse;
+}> {
+  // Recovery doesn't need auth, so we make a direct request
+  const response = await fetchWithTimeout(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'recover',
+      recovery_code: recoveryCode,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+
+  const result = await response.json() as ApiResponse & {
+    operator_id?: number;
+    api_key?: string;
+    cooldown_until?: string;
+  };
+
+  if (!result.success) {
+    throw new Error(result.error || 'Recovery failed');
+  }
+
+  return {
+    operatorId: result.operator_id || 0,
+    apiKey: result.api_key || '',
+    cooldownUntil: result.cooldown_until,
     rawResponse: result,
   };
 }

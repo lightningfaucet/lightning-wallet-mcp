@@ -46,6 +46,10 @@ function bolt11AmountSats(invoice) {
         }
         if (!Number.isFinite(msat) || msat < 0)
             return null;
+        // Sub-satoshi invoices (e.g. lnbc500p = 0.5 sat) cannot be represented; report unknown
+        // rather than 0, which the policy hook would read as a free payment.
+        if (msat > 0 && msat < 1000)
+            return null;
         return Math.round(msat / 1000);
     }
     catch {

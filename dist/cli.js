@@ -10,14 +10,30 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
-const VERSION = '1.4.0';
+const credentials_js_1 = require("./credentials.js");
+const VERSION = (() => {
+    try {
+        return require('../package.json').version;
+    }
+    catch {
+        return '0.0.0';
+    }
+})();
 // --- Helpers ---
 function getApiKey() {
-    const key = process.env.LIGHTNING_WALLET_API_KEY;
+    // Precedence: env var > credentials file saved by `lw register` / `lw use-key`.
+    const key = process.env.LIGHTNING_WALLET_API_KEY || (0, credentials_js_1.activeStoredKey)((0, credentials_js_1.loadCredentials)())?.api_key;
     if (!key) {
-        error('No API key found. Set LIGHTNING_WALLET_API_KEY or run: lw register');
+        error('No API key found. Run: lw register   (credentials are saved to ' + (0, credentials_js_1.credentialsPath)() + ')');
     }
     return key;
+}
+function intArg(value, name, opts = {}) {
+    const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+    if (!Number.isInteger(n) || (opts.min !== undefined && n < opts.min)) {
+        error(`${name} must be an integer${opts.min !== undefined ? ` >= ${opts.min}` : ''}`);
+    }
+    return n;
 }
 function getClient() {
     return new lightning_faucet_js_1.LightningFaucetClient(getApiKey());
@@ -88,11 +104,18 @@ async function cmdRegister(positional, flags) {
     const name = flags.name || positional[0] || undefined;
     const email = flags.email || undefined;
     const result = await (0, lightning_faucet_js_1.registerOperator)(name, email);
+    const savedTo = (0, credentials_js_1.saveOperatorKey)(result.apiKey, { id: result.operatorId, name, recovery_code: result.recoveryCode });
     return {
         operator_id: result.operatorId,
         api_key: result.apiKey,
         recovery_code: result.recoveryCode,
-        hint: `export LIGHTNING_WALLET_API_KEY=${result.apiKey}`,
+        credentials_saved_to: savedTo,
+        hint: savedTo
+            ? `Credentials saved to ${savedTo}. lw commands will use them automatically; no export needed.`
+            : `export LIGHTNING_WALLET_API_KEY=${result.apiKey}`,
+        next_step: email
+            ? 'Click the verification link we emailed you. Verified operators get 100 free sats credited automatically a few hours later.'
+            : 'Run: lw set-email you@example.com   to get 100 free sats after verification.',
         webhook_tip: 'Set up a webhook to get real-time notifications for payments and balance changes. Run: lw help webhooks',
     };
 }
@@ -297,6 +320,57 @@ async function cmdDecode(positional) {
         created_at: result.createdAt,
     };
 }
+async function cmdPayAddress(positional, flags) {
+    const address = positional[0];
+    if (!address || !address.includes('@'))
+        error('Usage: lw pay-address <user@domain> <amount_sats> [--comment "..."]');
+    const amount = intArg(positional[1], 'amount_sats', { min: 1 });
+    const comment = typeof flags.comment === 'string' ? flags.comment : undefined;
+    const r = await getClient().payLightningAddress(address, amount, comment);
+    return { address, amount_sats: r.amountSats, routing_fee_sats: r.routingFeeSats, platform_fee_sats: r.platformFeeSats, total_cost_sats: r.totalCostSats, preimage: r.preimage, payment_hash: r.paymentHash, new_balance: r.newBalance };
+}
+async function cmdKeysend(positional, flags) {
+    const pubkey = positional[0];
+    if (!pubkey || !/^0[23][0-9a-f]{64}$/i.test(pubkey))
+        error('Usage: lw keysend <node_pubkey_hex> <amount_sats> [--message "..."]');
+    const amount = intArg(positional[1], 'amount_sats', { min: 1 });
+    const message = typeof flags.message === 'string' ? flags.message : undefined;
+    return getClient().keysend(pubkey, amount, message);
+}
+async function cmdSweep(positional) {
+    const agentId = intArg(positional[0], 'agent_id', { min: 1 });
+    const amount = positional[1] === undefined || positional[1] === 'all' ? 'all' : intArg(positional[1], 'amount_sats', { min: 1 });
+    const r = await getClient().sweepAgent(agentId, amount);
+    return { agent_id: agentId, amount_transferred: r.amountTransferred, new_operator_balance: r.newOperatorBalance, new_agent_balance: r.newAgentBalance };
+}
+async function cmdSetBudget(positional) {
+    const agentId = intArg(positional[0], 'agent_id', { min: 1 });
+    const limit = intArg(positional[1], 'budget_limit_sats', { min: 0 });
+    const r = await getClient().setBudget(agentId, limit);
+    return { agent_id: r.agentId, budget_limit_sats: r.newBudgetLimitSats };
+}
+async function cmdRecover(positional) {
+    const code = positional[0];
+    if (!code)
+        error('Usage: lw recover <recovery_code>');
+    const r = await (0, lightning_faucet_js_1.recoverOperatorAccount)(code);
+    const savedTo = (0, credentials_js_1.saveOperatorKey)(r.apiKey, { id: r.operatorId, recovery_code: code });
+    return { operator_id: r.operatorId, api_key: r.apiKey, cooldown_until: r.cooldownUntil, credentials_saved_to: savedTo };
+}
+function cmdUseKey(positional, flags) {
+    const key = positional[0];
+    if (!key)
+        error('Usage: lw use-key <api_key> [--agent]');
+    const savedTo = flags.agent === true ? (0, credentials_js_1.saveAgentKey)(key, {}, true) : (0, credentials_js_1.saveOperatorKey)(key);
+    return { credentials_saved_to: savedTo, active: flags.agent === true ? 'agent' : 'operator' };
+}
+function cmdForget() {
+    const removed = (0, credentials_js_1.forgetCredentials)();
+    return { removed, path: (0, credentials_js_1.credentialsPath)() };
+}
+function cmdCredentials() {
+    return (0, credentials_js_1.describeCredentials)();
+}
 function cmdHelp() {
     const help = `Lightning Wallet CLI v${VERSION}
 https://lightningfaucet.com/ai-agents
@@ -308,8 +382,12 @@ USAGE
 
 SETUP
   register [--name "name"] [--email "you@example.com"]
-                                 Create operator account, prints API key
-  export LIGHTNING_WALLET_API_KEY=<key>   Set API key (after register)
+                                 Create operator account. Credentials are saved to
+                                 ~/.lightning-wallet/credentials.json and reused automatically.
+  use-key <api_key> [--agent]     Save an existing key instead (env LIGHTNING_WALLET_API_KEY wins if set)
+  credentials                     Show which saved credentials are active (never prints keys)
+  forget                          Delete the saved credentials file
+  recover <recovery_code>         Recover an operator account (rotates the key)
 
 COMMANDS
   whoami                          Show current identity (operator or agent)
@@ -320,12 +398,16 @@ COMMANDS
   withdraw-link [amount]          Create LNURL-withdraw link (omit amount to sweep all)
 
   pay <invoice>                   Pay a BOLT11 invoice [--max-fee <sats>]
+  pay-address <user@domain> <sats> Pay a Lightning address [--comment "..."]
+  keysend <pubkey> <sats>         Keysend to a node pubkey [--message "..."]
   pay-api <url>                   Pay L402/X402 API (auto-detect protocol)
                                     [--method GET] [--body "{}"] [--max-sats 1000]
   decode <invoice>                Decode BOLT11 invoice without paying
 
-  create-agent <name>             Create agent [--budget <sats>]
+  create-agent <name>             Create agent [--budget <sats>]  (optional: operator key can pay directly)
   fund-agent <id> <amount>        Transfer sats to agent
+  sweep <id> [amount|all]         Move sats from an agent back to the operator
+  set-budget <id> <sats>          Set an agent's spending limit (0 = unlimited)
   list-agents | agents             List all agents
 
   transactions                    Recent transactions [--limit 10] [--offset 0]
@@ -357,8 +439,8 @@ OUTPUT
   --human                         Human-readable output
 
 EXAMPLES
-  # Register and save key
-  export LIGHTNING_WALLET_API_KEY=$(lw register --name "My Bot" | jq -r '.api_key')
+  # Register once; the key is saved locally and reused
+  lw register --name "My Bot" --email you@example.com
 
   # Check balance
   lw balance | jq '.balance_sats'
@@ -385,6 +467,30 @@ async function main() {
         switch (command) {
             case 'register':
                 result = await cmdRegister(positional, flags);
+                break;
+            case 'pay-address':
+                result = await cmdPayAddress(positional, flags);
+                break;
+            case 'keysend':
+                result = await cmdKeysend(positional, flags);
+                break;
+            case 'sweep':
+                result = await cmdSweep(positional);
+                break;
+            case 'set-budget':
+                result = await cmdSetBudget(positional);
+                break;
+            case 'recover':
+                result = await cmdRecover(positional);
+                break;
+            case 'use-key':
+                result = cmdUseKey(positional, flags);
+                break;
+            case 'forget':
+                result = cmdForget();
+                break;
+            case 'credentials':
+                result = cmdCredentials();
                 break;
             case 'whoami':
                 result = await cmdWhoami();

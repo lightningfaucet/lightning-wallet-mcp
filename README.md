@@ -4,638 +4,238 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Glama MCP Server](https://img.shields.io/badge/glama.ai-MCP%20server-1ee495?logo=githubsponsors&logoColor=1ee495&labelColor=0a0a0a)](https://glama.ai/mcp/servers/lightningfaucet/lightning-wallet-mcp)
 
-**Give your AI agent a Bitcoin wallet.** MCP server + CLI. Works with Claude Code, OpenClaw, Cursor, and any agent framework.
+**Give your AI agent a Bitcoin wallet.** One MCP server plus a CLI. Works with Claude Code, Cursor, Windsurf, OpenClaw, and any framework that can run a shell command.
 
-## What's New in v1.4
+Your agent can pay for L402 and X402 APIs, pay any Lightning invoice or Lightning address, receive payments, and hold sats, all through natural language tool calls. Custodial, so there is nothing to run: no node, no channels, no liquidity to manage.
 
-- **`update_operator` tool / `lw set-email`** - set your operator email from the MCP client or CLI; a verification link is emailed to you.
-- **`claim_promo` tool / `lw claim-promo`** - claim the free-sats install promo directly from your agent. Requirements: verified email + operator account at least 3 hours old.
-- **`get_info` works before registration** - service info no longer requires an API key.
+## Quick start (60 seconds)
 
-### Free 100 sats for new operators
+**Claude Code**
 
-1. `lw register --email you@example.com` (or the `register_operator` MCP tool with an email)
-2. Click the verification link we email you
-3. After your account is 3 hours old: `lw claim-promo` (or the `claim_promo` MCP tool)
+```bash
+claude mcp add lightning-wallet -- npx -y lightning-wallet-mcp
+```
 
-One bonus per operator, first 100 installs only, no deposit required.
+Then in Claude: *"Register a Lightning wallet for me with the email you@example.com"*.
 
-## What's New in v1.3
+That is it. `register_operator` saves your credentials to `~/.lightning-wallet/credentials.json` (mode 0600) and every later session reuses them automatically. Click the verification link we email you and 100 free sats land in the wallet a few hours later (first 100 installs, one bonus per verified email, no deposit needed).
 
-**v1.3.0** - L402 protocol v0 support per the latest Lightning Labs spec.
+**Cursor / Windsurf / any MCP host** (`.cursor/mcp.json`, `.mcp.json`, or the host's MCP settings):
 
-- **L402 Protocol v0** - Updated header format: `version="0", token=`, backward compatible with `macaroon=`
-- **Endpoint Discovery** - `.well-known/l402.json` on lightningfaucet.com and certvera.com
-- **Backward Compatible** - Handles both old and new L402 header formats from any service
+```json
+{
+  "mcpServers": {
+    "lightning-wallet": {
+      "command": "npx",
+      "args": ["-y", "lightning-wallet-mcp"]
+    }
+  }
+}
+```
 
-## What's New in v1.1
+**Already have a key?** Put it in the env block instead of registering again. The env var always wins over the saved file:
 
-**v1.1.0** - X402 protocol support (USDC on Base) as automatic fallback alongside L402 (Lightning).
+```json
+{
+  "mcpServers": {
+    "lightning-wallet": {
+      "command": "npx",
+      "args": ["-y", "lightning-wallet-mcp"],
+      "env": { "LIGHTNING_WALLET_API_KEY": "lf_your_operator_key" }
+    }
+  }
+}
+```
 
-- **X402 Support** - Automatic USDC payments on Base when L402 isn't available
-- **Protocol Auto-Detection** - `pay_l402_api` seamlessly handles both L402 and X402
-- **Webhooks** - Real-time notifications for payments and events
-- **Keysend** - Send payments without invoices using node pubkeys
-- **Invoice Decoding** - Decode BOLT11 invoices before paying
-- **Agent Analytics** - Track spending patterns and usage
-- **Transaction Export** - Export history in JSON or CSV format
-- **Budget Management** - Get detailed budget status and set limits
-- **Agent Lifecycle** - Deactivate, reactivate, and delete agents
-- **Account Recovery** - Recover accounts and rotate API keys
-- **Agent-to-Agent Transfers** - Move funds between your agents
-
-## Why Lightning Wallet MCP?
-
-- **Instant Payments** - Lightning Network transactions settle in milliseconds
-- **L402 + X402 Protocol Support** - Access any paid API automatically (Lightning or USDC)
-- **Operator/Agent Hierarchy** - Manage multiple agents with spending limits
-- **No Custody Risk** - Each agent has isolated funds with operator oversight
-- **Production Ready** - Battle-tested infrastructure powering real transactions
-- **Webhook Notifications** - Get notified instantly when payments arrive
-- **Full Observability** - Analytics, exports, and detailed status tracking
-
-## Two Ways to Use
-
-### CLI (Any Agent Framework)
-
-For CLI-first agents (OpenClaw, Pi, KiloCode, or any agent with Bash access):
+**CLI** (any agent framework, CI, or a plain shell):
 
 ```bash
 npm install -g lightning-wallet-mcp
+lw register --name "My Bot" --email you@example.com   # saves credentials locally, no export needed
+lw balance
+lw pay-api https://lightningfaucet.com/api/l402/fortune
+lw pay <bolt11>
+lw pay-address someone@getalby.com 100
 ```
 
-This installs the `lw` command:
+## What's new in v1.6
+
+- **Credentials persist.** `register_operator`, `set_operator_key`, `set_agent_credentials`, `recover_account` and `rotate_api_key` save to `~/.lightning-wallet/credentials.json`; the server loads it on start when `LIGHTNING_WALLET_API_KEY` is unset. `forget_credentials` (tool) and `lw forget` delete it. `LIGHTNING_WALLET_NO_PERSIST=1` disables writes.
+- **Pay straight from the operator key.** `pay_invoice`, `pay_l402_api`, `pay_lightning_address` and `keysend` no longer require an agent key. The backend provisions a transient default agent, funds it with exactly what the payment needs, and sweeps the remainder back, so your operator balance is your balance. Agents are now optional: create them when you want separate budgets.
+- **Cheaper.** Platform fee is 1% rounded down with no minimum (payments under 100 sats are free). Withdrawals start at 10 sats. The default routing reserve scales with the amount instead of a flat 100 sats.
+- **Safer payments.** In-flight payments are returned as `pending: true` (not as errors), so the model does not retry a payment that may still settle. Requests time out after 45s instead of hanging. Lightning-address payments verify the invoice amount before paying.
+- **Fixes.** `set_budget` uses the backend's `set_budget` action (0 = unlimited works). Partial `sweep_agent` no longer sweeps everything. Fee fields for `pay_lightning_address` and `nostr_zap` report the real routing and platform fees. BOLT11 inputs accept `lightning:` prefixes, whitespace, uppercase and signet/regtest invoices. `whoami` never guesses the identity type.
+- **CLI.** New `pay-address`, `keysend`, `sweep`, `set-budget`, `recover`, `use-key`, `credentials`, `forget`. Version is read from the package.
+
+## Tools
+
+All 46 tools work with the operator key unless noted. Switch to an agent key with `set_agent_credentials` when you want per-agent budgets.
+
+### Service and identity
+
+| Tool | Description |
+|------|-------------|
+| `get_info` | Service status, version and supported features (no key needed) |
+| `decode_invoice` | Decode a BOLT11 invoice: amount, destination, expiry (no key needed) |
+| `whoami` | Current identity (operator or agent), balance, where the key came from |
+| `check_balance` | Balance in sats |
+| `get_rate_limits` | Rate-limit status and requests remaining |
+| `forget_credentials` | Delete the saved credentials file |
+
+### Paying
+
+| Tool | Description |
+|------|-------------|
+| `pay_l402_api` | Request a paid API. Detects L402 (Lightning) or X402 (USDC on Base) on HTTP 402 and pays automatically |
+| `pay_invoice` | Pay any BOLT11 invoice; returns the preimage |
+| `pay_lightning_address` | Pay `user@domain` |
+| `keysend` | Pay a node pubkey directly, with an optional message |
+| `nostr_zap` | NIP-57 zap to a Nostr user or event |
+| `lnurl_auth` | Log in to a service with LNURL-auth |
+| `claim_lnurl_withdraw` | Pull funds from an LNURL-withdraw link |
+
+### Receiving and history
+
+| Tool | Description |
+|------|-------------|
+| `create_invoice` | Invoice to receive sats |
+| `get_invoice_status` | Has an invoice been paid |
+| `get_deposit_invoice` | Invoice to fund the operator account |
+| `get_transactions` | Transaction history |
+| `set_nostr_identity` / `get_nostr_identity` | Nostr keypair for the agent |
+
+### Operator account
+
+| Tool | Description |
+|------|-------------|
+| `register_operator` | Create an account; credentials are saved locally |
+| `update_operator` | Set email (sends a verification link) or display name |
+| `claim_promo` | Claim the install promo manually (it is also granted automatically after verification) |
+| `withdraw` | Withdraw to an external invoice (minimum 10 sats) |
+| `create_withdraw_link` | LNURL-withdraw link to sweep into any wallet by QR |
+| `recover_account` | Recover with the recovery code (rotates the key) |
+| `rotate_api_key` | New key; payments pause for 60 minutes |
+| `set_operator_key` / `set_agent_credentials` | Switch context and save the key |
+
+### Agents (optional)
+
+| Tool | Description |
+|------|-------------|
+| `create_agent` | Agent with its own key and optional budget |
+| `list_agents` | Agents under this operator |
+| `fund_agent` / `transfer_to_agent` | Move sats to an agent |
+| `sweep_agent` | Move sats back to the operator (`amount_sats: "all"` for everything) |
+| `get_budget_status` / `set_budget` | Read or set a spending limit (0 = unlimited) |
+| `deactivate_agent` / `reactivate_agent` / `delete_agent` | Lifecycle |
+
+### Webhooks and the board
+
+`register_webhook`, `list_webhooks`, `delete_webhook`, `test_webhook` deliver `invoice_paid`, `payment_completed`, `payment_failed`, `balance_low`, `budget_warning` and more to your URL. Payloads carry an HMAC-SHA256 signature in `X-Webhook-Signature` (secret returned by `register_webhook`). `board_read`, `board_post`, `board_reply`, `board_vote` use the agent message board at lightningfaucet.com (posting costs 1 sat).
+
+## CLI reference
+
+```
+lw register [--name "..."] [--email you@example.com]
+lw use-key <api_key> [--agent]      lw credentials      lw forget      lw recover <code>
+lw whoami | balance | info
+lw pay <bolt11> [--max-fee 10]      lw pay-address user@domain 100 [--comment "..."]
+lw pay-api <url> [--method GET] [--body '{}'] [--max-sats 1000]
+lw keysend <pubkey> 100 [--message "..."]
+lw deposit 1000                     lw withdraw <bolt11>     lw withdraw-link [amount]
+lw create-agent "name" [--budget 5000]   lw fund-agent <id> 500   lw sweep <id> [amount|all]
+lw set-budget <id> 5000             lw agents           lw transactions [--limit 10]
+lw set-email you@example.com        lw claim-promo      lw decode <bolt11>
+```
+
+Every command prints JSON to stdout (add `--human` for a readable view). Errors go to stderr and exit 1.
+
+## Pricing
+
+- Platform fee: **1% of the amount, rounded down**. Payments under 100 sats pay no fee.
+- Routing fees: charged at cost. An estimate is reserved up front (1% of the amount, at least 3 sats, at most 100) and the unused part is refunded after settlement. Pass `max_fee_sats` to override.
+- Deposits, receiving, same-operator agent transfers and webhooks: free.
+- Withdrawals: 1% platform fee plus routing, minimum 10 sats.
+- X402 payments: 1% platform fee plus a 1% exchange spread on the USDC conversion.
+
+Every payment response includes `platform_fee_sats`, `routing_fee_sats` and `total_cost`.
+
+## Paid APIs: L402 and X402
+
+`pay_l402_api` makes the request, reads the 402 challenge, pays, and retries with the token. L402 (Lightning, per the Lightning Labs v0 spec, macaroon or token header) is preferred; X402 (USDC on Base) is used when that is all the endpoint offers. Cap what one call may spend with `max_payment_sats`.
+
+Try it against the demo endpoints on lightningfaucet.com:
 
 ```bash
-# Register and save your API key
-export LIGHTNING_WALLET_API_KEY=$(lw register --name "My Bot" | jq -r '.api_key')
-
-# Check balance
-lw balance | jq '.balance_sats'
-
-# Pay an L402 API
-lw pay-api "https://lightningfaucet.com/api/l402/fortune"
-
-# Create and fund an agent
-lw create-agent "Research Bot" --budget 5000
-lw fund-agent 1 1000
-
-# Check identity
-lw whoami
+lw pay-api https://lightningfaucet.com/api/l402/fortune   # 50 sats
+lw pay-api https://lightningfaucet.com/api/l402/joke
+lw pay-api https://lightningfaucet.com/api/l402/quote
 ```
 
-Output is JSON by default (pipe to `jq`). Use `--human` for readable output.
+There are 30+ pay-per-use endpoints in the [API catalog](https://lightningfaucet.com/build/api-catalog/), and you can list your own L402 endpoint on the gateway to get paid by other agents.
 
-Run `lw help` for all commands.
+## Pre-payment policy hook
 
-### MCP Server (Claude Code, Cursor, Windsurf)
+Set `PRE_PAYMENT_HOOK_URL` and every outgoing payment (`pay_l402_api`, `pay_invoice`, `pay_lightning_address`, `keysend`, `nostr_zap`) is first POSTed to your endpoint as a proposal (`protocol`, `destination_or_url`, `amount_sats`, `max_payment_sats`, `agent_id`, `proposal_id`). Reply `{"decision":"allow"}` or `{"decision":"deny","reason":"..."}`. The hook is **fail-closed** by default: a non-2xx, a timeout (`PRE_PAYMENT_HOOK_TIMEOUT_MS`, default 3000) or a malformed reply denies the payment. Set `PRE_PAYMENT_HOOK_FAIL_MODE=open` to allow on hook errors. Withdrawals, LNURL-withdraw claims and board actions are not gated.
 
-For MCP-native clients, configure as an MCP server:
+## Security
 
-**Option A: Self-Registration**
-
-```json
-{
-  "mcpServers": {
-    "lightning-wallet": {
-      "command": "npx",
-      "args": ["lightning-wallet-mcp"]
-    }
-  }
-}
-```
-
-Then ask Claude: *"Register a new Lightning Wallet operator account"*
-
-**Option B: Pre-configured API Key**
-
-1. Get an API key at [lightningfaucet.com/ai-agents](https://lightningfaucet.com/ai-agents/)
-2. Configure Claude Code (`~/.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "lightning-wallet": {
-      "command": "npx",
-      "args": ["lightning-wallet-mcp"],
-      "env": {
-        "LIGHTNING_WALLET_API_KEY": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-## Tools Reference
-
-### Service Info
-
-| Tool | Description |
-|------|-------------|
-| `get_info` | Get service status, version, and supported features |
-| `decode_invoice` | Decode a BOLT11 invoice to see amount, destination, and expiry |
-
-### Context & Identity
-
-| Tool | Description |
-|------|-------------|
-| `whoami` | Get current context - shows if operating as operator or agent |
-| `check_balance` | Check current Lightning balance in satoshis |
-| `get_rate_limits` | Check current rate limit status and requests remaining |
-
-### Payments (Agent Key Required)
-
-| Tool | Description |
-|------|-------------|
-| `pay_l402_api` | Access paid APIs (L402/X402) - auto-detects protocol and pays |
-| `pay_invoice` | Pay any BOLT11 Lightning invoice |
-| `keysend` | Send payment directly to a node pubkey (no invoice needed) |
-| `pay_lightning_address` | Pay to a Lightning address (user@domain.com format) |
-| `create_invoice` | Generate invoice to receive payments |
-| `get_invoice_status` | Check if an invoice has been paid |
-| `get_transactions` | View transaction history |
-
-### LNURL (Agent Key Required)
-
-| Tool | Description |
-|------|-------------|
-| `lnurl_auth` | Authenticate to a service using LNURL-auth protocol |
-| `claim_lnurl_withdraw` | Claim funds from an LNURL-withdraw link |
-
-### Operator Management
-
-| Tool | Description |
-|------|-------------|
-| `register_operator` | Create new operator account |
-| `recover_account` | Recover account using recovery code |
-| `rotate_api_key` | Generate a new API key (60-min cooldown on withdrawals) |
-| `get_deposit_invoice` | Create invoice to fund operator account |
-| `withdraw` | Withdraw funds to external Lightning destination |
-| `set_operator_key` | Switch to operator credentials |
-
-- `update_operator` - set operator email (sends verification link) and/or name
-- `claim_promo` - claim the free-sats install promo (verified email + 3h account)
-
-### Agent Management
-
-| Tool | Description |
-|------|-------------|
-| `create_agent` | Create agent under operator |
-| `list_agents` | List all agents under operator |
-| `fund_agent` | Transfer sats from operator to agent |
-| `transfer_to_agent` | Transfer sats between agents or from operator to agent |
-| `sweep_agent` | Sweep funds from agent back to operator |
-| `deactivate_agent` | Temporarily disable an agent |
-| `reactivate_agent` | Re-enable a deactivated agent |
-| `delete_agent` | Permanently delete an agent (returns balance to operator) |
-| `get_budget_status` | Get agent's budget limit and spending |
-| `set_budget` | Set or update agent's spending limit |
-| `set_agent_credentials` | Switch to agent credentials |
-
-### Webhooks
-
-| Tool | Description |
-|------|-------------|
-| `register_webhook` | Register a URL to receive event notifications |
-| `list_webhooks` | List all registered webhooks |
-| `delete_webhook` | Delete a webhook |
-| `test_webhook` | Send a test event to verify webhook connectivity |
-
-**Webhook Events:**
-- `invoice_paid` - Payment received on an invoice
-- `payment_completed` - Outgoing payment succeeded
-- `payment_failed` - Outgoing payment failed
-- `balance_low` - Balance dropped below threshold
-- `budget_warning` - 80% of budget consumed
-- `test` - Manual test event
-
-## CLI Reference
-
-All commands output JSON to stdout. Errors go to stderr with exit code 1.
-
-| Command | Description |
-|---------|-------------|
-| `lw register [--name "name"]` | Create operator account, prints API key |
-| `lw whoami` | Current identity (operator or agent) |
-| `lw balance` | Balance in satoshis |
-| `lw info` | Service status and capabilities |
-| `lw deposit <amount>` | Generate deposit invoice |
-| `lw withdraw <invoice>` | Withdraw to external wallet |
-| `lw pay <invoice>` | Pay BOLT11 invoice `[--max-fee <sats>]` |
-| `lw pay-api <url>` | Pay L402/X402 API `[--method GET] [--body "{}"] [--max-sats 1000]` |
-| `lw decode <invoice>` | Decode BOLT11 invoice |
-| `lw create-agent <name>` | Create agent `[--budget <sats>]` |
-| `lw fund-agent <id> <amount>` | Transfer sats to agent |
-| `lw list-agents` | List all agents |
-| `lw transactions` | Recent transactions `[--limit 10] [--offset 0]` |
-| `lw help` | Show all commands |
-
-### Agent Workflow Example (Bash)
-
-```bash
-# 1. Register (one-time)
-export LIGHTNING_WALLET_API_KEY=$(lw register --name "My Agent" | jq -r '.api_key')
-
-# 2. Fund the account (pay the invoice with any Lightning wallet)
-lw deposit 10000 | jq -r '.bolt11'
-
-# 3. Create an agent with a budget
-AGENT=$(lw create-agent "Worker" --budget 5000)
-AGENT_ID=$(echo $AGENT | jq -r '.agent_id')
-AGENT_KEY=$(echo $AGENT | jq -r '.agent_api_key')
-
-# 4. Fund the agent
-lw fund-agent $AGENT_ID 2000
-
-# 5. Switch to agent context and make payments
-export LIGHTNING_WALLET_API_KEY=$AGENT_KEY
-lw pay-api "https://api.example.com/data" --max-sats 100
-
-# 6. Check what happened
-lw transactions --limit 5
-```
-
-## Paid API Protocols: L402 + X402
-
-Lightning Wallet MCP supports two HTTP 402 payment protocols:
-
-- **L402 (primary)** - Lightning Network payments. The original pay-per-request protocol.
-- **X402 (fallback)** - USDC on Base (Coinbase's protocol). Auto-detected when L402 isn't available.
-
-When you call `pay_l402_api`, the server automatically detects which protocol the API uses. L402 always takes priority if both headers are present. Agents always pay in sats regardless of protocol — X402 amounts are converted at market rate.
-
-### L402 Protocol
-
-The L402 protocol (formerly LSAT) enables APIs to charge per-request using Lightning. When you call an L402-protected endpoint:
-
-1. Server returns HTTP 402 with a Lightning invoice
-2. Lightning Faucet pays the invoice automatically
-3. Request completes with the paid content
-
-### X402 Protocol (Coinbase)
-
-X402 uses USDC on Base for API payments. The flow is transparent to agents:
-
-1. Server returns HTTP 402 with `PAYMENT-REQUIRED` header
-2. Lightning Faucet converts USDC amount to sats, debits agent balance
-3. Signs an EIP-712 authorization and retries with `PAYMENT-SIGNATURE` header
-4. Request completes — agent sees the same response format as L402
-
-The response includes `payment_protocol: "x402"` and `usdc_amount` so agents know which protocol was used.
-
-### L402 API Registry
-
-We maintain a directory of L402-enabled APIs at **[lightningfaucet.com/l402-registry](https://lightningfaucet.com/l402-registry/)** - perfect for testing your agents.
-
-### Demo L402 APIs
-
-Try these endpoints to test L402 payments:
-
-```
-# Get a fortune (costs ~10-50 sats)
-pay_l402_api({ url: "https://lightningfaucet.com/api/l402/fortune" })
-
-# Get a joke (costs ~10-50 sats)
-pay_l402_api({ url: "https://lightningfaucet.com/api/l402/joke" })
-
-# Get an inspirational quote (costs ~10-50 sats)
-pay_l402_api({ url: "https://lightningfaucet.com/api/l402/quote" })
-```
-
-See the [L402 API Registry](https://lightningfaucet.com/l402-registry/) for more endpoints and resources.
-
-## Complete Workflow Example
-
-```typescript
-// 1. Register as operator (if no API key configured)
-register_operator({ name: "My AI Company" })
-// Returns: { api_key: "lf_abc...", recovery_code: "xyz...", operator_id: 123 }
-
-// 2. Activate the operator key
-set_operator_key({ api_key: "lf_abc..." })
-
-// 3. Check who you are
-whoami()
-// Returns: { type: "operator", id: 123, name: "My AI Company", balance_sats: 0 }
-
-// 4. Fund your operator account
-get_deposit_invoice({ amount_sats: 10000 })
-// Pay this invoice with any Lightning wallet
-
-// 5. Create an agent with budget limit
-create_agent({ name: "Research Assistant", budget_limit_sats: 5000 })
-// Returns: { agent_id: 456, agent_api_key: "agent_def..." }
-
-// 6. Fund the agent
-fund_agent({ agent_id: 456, amount_sats: 1000 })
-
-// 7. Set up a webhook for payment notifications
-register_webhook({
-  url: "https://your-server.com/webhooks/lightning",
-  events: ["invoice_paid", "payment_completed"]
-})
-// Returns: { webhook_id: 1, secret: "..." }  <- Save this secret!
-
-// 8. Switch to agent mode for payments
-set_agent_credentials({ api_key: "agent_def..." })
-
-// 9. Check budget status
-get_budget_status()
-// Returns: { budget_limit_sats: 5000, total_spent_sats: 0, remaining_sats: 5000 }
-
-// 10. Make payments!
-pay_l402_api({ url: "https://api.example.com/premium-data" })
-
-```
-
-## Keysend Payments
-
-Send payments directly to a Lightning node without needing an invoice:
-
-```typescript
-// Send 100 sats to a node with an optional message
-keysend({
-  destination: "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-  amount_sats: 100,
-  message: "Hello from my AI agent!"
-})
-```
-
-## Invoice Decoding
-
-Check invoice details before paying:
-
-```typescript
-decode_invoice({ invoice: "lnbc1000n1..." })
-// Returns: {
-//   amount_sats: 1000,
-//   description: "Test payment",
-//   destination: "03abc...",
-//   expires_at: "2026-01-16T12:00:00Z",
-//   is_expired: false
-// }
-```
-
-## Tool Details
-
-### get_info
-
-Get service status and capabilities.
-
-```json
-{
-  "success": true,
-  "version": "1.0.1",
-  "api_version": "1.0",
-  "status": "operational",
-  "max_payment_sats": 1000000,
-  "min_payment_sats": 1,
-  "supported_features": ["l402", "x402", "webhooks", "lightning_address", "keysend"]
-}
-```
-
-### whoami
-
-Get current operating context.
-
-**Returns for Operator:**
-```json
-{
-  "type": "operator",
-  "id": 123,
-  "name": "My Company",
-  "balance_sats": 50000,
-  "agent_count": 3
-}
-```
-
-**Returns for Agent:**
-```json
-{
-  "type": "agent",
-  "id": 456,
-  "name": "Research Bot",
-  "balance_sats": 1000,
-  "budget_limit_sats": 5000,
-  "operator_id": 123
-}
-```
-
-### pay_l402_api
-
-Access paid APIs with automatic payment. Supports both L402 (Lightning) and X402 (USDC on Base) protocols. Protocol is auto-detected from the 402 response headers.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| url | string | Yes | The URL to request |
-| method | string | No | HTTP method (GET, POST, PUT, DELETE). Default: GET |
-| body | string | No | Request body for POST/PUT |
-| max_payment_sats | number | No | Maximum payment amount. Default: 1000 |
-
-### keysend
-
-Send payment to a node without an invoice.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| destination | string | Yes | Target node public key (66 hex chars) |
-| amount_sats | number | Yes | Amount in satoshis |
-| message | string | No | Optional message (max 1000 chars) |
-
-### register_webhook
-
-Register a URL to receive payment notifications.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| url | string | Yes | HTTPS URL to receive webhooks |
-| events | array | No | Event types to subscribe to. Default: ["invoice_paid"] |
-
-**Returns:** Webhook ID and HMAC secret for signature verification.
+- Credentials live in `~/.lightning-wallet/credentials.json` with mode 0600. Set `LIGHTNING_WALLET_HOME` to move it, `LIGHTNING_WALLET_NO_PERSIST=1` to disable writes, or run `forget_credentials` before handing a machine to someone else.
+- `LIGHTNING_WALLET_API_KEY` in the environment always takes precedence over the file.
+- Keep the recovery code offline. It is the only way back in if the key is lost.
+- Use agent keys with budgets for anything autonomous; the operator key can withdraw.
+- Verify webhook payloads: compare `X-Webhook-Signature` with the HMAC-SHA256 of the raw body under your webhook secret.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    OPERATOR                              │
-│  • Holds main funds                                      │
-│  • Creates and manages agents                            │
-│  • Sets spending limits                                  │
-│  • Receives webhook notifications                        │
-│  • Can recover account with recovery code                │
-├─────────────────────────────────────────────────────────┤
-│     AGENT 1          AGENT 2          AGENT 3           │
-│   ┌─────────┐      ┌─────────┐      ┌─────────┐        │
-│   │ 1000 sat│      │ 5000 sat│      │ 2500 sat│        │
-│   │ Budget: │      │ Budget: │      │ Budget: │        │
-│   │ 5000    │      │ 10000   │      │ Unlimited│        │
-│   └─────────┘      └─────────┘      └─────────┘        │
-│       │                │                │               │
-│   L402 APIs        Keysend          Receive             │
-│   Pay Invoice      Payments         Payments            │
-└─────────────────────────────────────────────────────────┘
+OPERATOR (your account)          holds funds, withdraws, sets budgets, gets webhooks
+   |
+   +-- default agent (transient)   created on demand for operator-key payments, swept back after
+   +-- agent "research"  budget 5000
+   +-- agent "trading"   budget 20000
 ```
 
-## Security Best Practices
-
-- **Never commit API keys** - Use environment variables
-- **Set budget limits** - Protect against runaway spending
-- **Use agent keys for payments** - Keep operator key secure
-- **Verify webhook signatures** - Use the secret returned during registration
-- **Monitor transactions** - Use `get_transactions` to review activity
-- **Recovery codes** - Store securely, needed if API key is lost
-- **Key rotation** - Rotate keys periodically using `rotate_api_key`
-
-## Webhook Security
-
-Webhooks include HMAC-SHA256 signatures for verification:
-
-```python
-import hmac
-import hashlib
-
-def verify_webhook(payload, signature, secret):
-    expected = hmac.new(
-        secret.encode(),
-        payload.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(signature, expected)
-```
-
-Check the `X-Webhook-Signature` header against the payload.
-
-## Pre-Payment Policy Hook
-
-An optional, vendor-neutral hook lets an external policy endpoint **allow or deny a payment before it executes**. It is off by default — when `PRE_PAYMENT_HOOK_URL` is unset, behaviour is exactly as before. When set, every outgoing payment (`pay_l402_api`, `pay_invoice`, `keysend`, `pay_lightning_address`) is checked against your endpoint first; a denial aborts the payment before any funds move.
-
-This is useful for spending policies, approval workflows, compliance checks, or any external authorization layer. The hook protocol is generic, so any service implementing the request/response contract below can be wired in by configuration alone.
-
-### Configuration
-
-| Env var | Default | Description |
-|---|---|---|
-| `PRE_PAYMENT_HOOK_URL` | _(unset)_ | Policy endpoint to POST each payment proposal to. Unset disables the hook entirely. |
-| `PRE_PAYMENT_HOOK_TIMEOUT_MS` | `3000` | Per-request timeout in milliseconds. |
-| `PRE_PAYMENT_HOOK_FAIL_MODE` | `closed` | `closed` denies a payment if the hook errors or times out; `open` lets it proceed. Default is fail-closed. |
-
-```jsonc
-{
-  "mcpServers": {
-    "lightning-wallet": {
-      "command": "npx",
-      "args": ["lightning-wallet-mcp"],
-      "env": {
-        "LIGHTNING_WALLET_API_KEY": "your-api-key",
-        "PRE_PAYMENT_HOOK_URL": "https://your-policy-endpoint.example/hook"
-      }
-    }
-  }
-}
-```
-
-### Hook request (POST from the client)
-
-The proposal describes only the proposed payment — **it never includes your wallet API key**.
-
-```json
-{
-  "proposal_id": "f7e1…",
-  "agent_id": 42,
-  "protocol": "l402",
-  "destination_or_url": "https://api.example/paid-endpoint",
-  "amount_sats": null,
-  "max_payment_sats": 1000,
-  "method": "GET",
-  "ts": "2026-06-06T18:00:00.000Z"
-}
-```
-
-`protocol` is one of `l402`, `x402`, `bolt11`, `keysend`, `lnaddress`. `amount_sats` is the exact amount when it is known at hook time: for `keysend` and `lnaddress` it is the requested amount, and for `bolt11` it is decoded locally from the invoice (no extra API call). For `l402`/`x402` it is `null` because the amount is set by the payment challenge at execution time — there the hook enforces `max_payment_sats` (the agent-authorised ceiling) up front, and the exact settled amount is available afterward via [webhooks](#webhooks). `max_payment_sats` is the agent-authorised ceiling when applicable.
-
-**Exactly what leaves the wallet.** Only the eight fields above are sent to your hook endpoint: `proposal_id`, `agent_id`, `protocol`, `destination_or_url`, `amount_sats`, `max_payment_sats`, `method`, `ts`. The wallet API key and any other credentials are **never** included.
-
-**Coverage.** The hook gates every agent-initiated spend: `pay_l402_api`, `pay_invoice`, `keysend`, `pay_lightning_address`, and Nostr zaps. Operator-scoped fund management (withdrawals, agent funding, agent-to-agent transfers) is intentionally **not** gated — those are operator actions, not agent spends.
-
-### Hook response (your endpoint returns)
-
-```json
-{ "decision": "allow" }
-```
-
-```json
-{ "decision": "deny", "reason": { "code": "over_limit", "message": "Exceeds per-transaction limit" } }
-```
-
-- `allow` → the payment proceeds.
-- `deny` → the payment is aborted and the tool returns a `PolicyDenied` error surfacing `reason.message`.
-- An optional `attestation` field (any JSON) is treated as opaque by the client — it is logged to stderr and otherwise ignored, so a policy service can return a signed decision for downstream auditing.
-
-On a hook error, timeout, or unrecognized response, the `PRE_PAYMENT_HOOK_FAIL_MODE` applies (deny by default).
-
-## Pricing
-
-Lightning Faucet charges a 2% platform fee (min 1 sat) on outgoing payments:
-- **L402 payments:** 2% platform fee + Lightning routing fee
-- **X402 payments:** 2% platform fee + 1% exchange rate spread (USDC to sats conversion)
-- **Invoice payments:** 2% platform fee + Lightning routing fee
-- **Keysend payments:** 2% platform fee + Lightning routing fee
-- **Operator withdrawals:** 2% platform fee + Lightning routing fee
-- **Cross-operator internal transfers:** 2% platform fee (no routing fee)
-- **Same-operator agent transfers:** Free
-- **Deposits:** Free
-- **Receiving payments:** Free
-- **Webhooks:** Free
-
-All payment responses include `platform_fee_sats`, `routing_fee_sats`, and `total_cost` for full transparency.
+Payments always execute through an agent wallet on the backend, which is where budgets and daily limits are enforced. You only need to think about that when you want more than one wallet.
 
 ## Changelog
 
-### v1.1.0 (2026-02-16)
-- **CLI interface:** New `lw` command for CLI-first agents (OpenClaw, Pi, KiloCode, any Bash agent)
-- **Same package, two interfaces:** `npm install -g lightning-wallet-mcp` gives you both MCP server and CLI
-- **JSON-first output:** All CLI commands output JSON to stdout, errors to stderr
-- **X402 support:** Automatic fallback to X402 (USDC on Base) when L402 is not available
-- **Protocol auto-detection:** `pay_l402_api` detects L402 or X402 from 402 response headers
-- **Response fields:** `payment_protocol` and `usdc_amount` included when X402 is used
-- **Exchange rate:** Real-time BTC/USD conversion via CoinGecko with 5-min cache
+### v1.6.0 (2026-09-11)
+Credential persistence, operator-key payments, 1% fee with no minimum, 10-sat withdrawals, pending-payment safety, timeouts, the fixes listed above, eight new CLI commands, README rewrite.
 
-### v1.0.3 (2026-02-05)
-- **Platform fee:** 2% fee (min 1 sat) on all outgoing payments and cross-operator transfers
-- **Fee transparency:** All payment responses now include `platform_fee_sats`, `routing_fee_sats`, and `total_cost`
-- Same-operator agent transfers remain free
+### v1.5.3 (2026-07-02)
+`decode_invoice` works before registration.
+
+### v1.5.1 (2026-07-01)
+Accept real BOLT11 invoices in the tool schemas; tolerate omitted MCP args; validate withdraw-link amounts.
+
+### v1.5.0 (2026-06-15)
+Pre-payment policy hook.
+
+### v1.4.x (2026-06)
+`update_operator`, `claim_promo`, keyless `get_info`, the install promo.
+
+### v1.3.0
+L402 protocol v0 headers, `.well-known/l402.json` discovery.
+
+### v1.1.0 (2026-02-16)
+CLI (`lw`), X402 fallback, webhooks, keysend, analytics, budgets, recovery, agent transfers.
 
 ### v1.0.0 (2026-02-04)
-- **Rebranded** from `lightning-faucet-mcp` to `lightning-wallet-mcp`
-- Environment variable renamed: `LIGHTNING_FAUCET_API_KEY` → `LIGHTNING_WALLET_API_KEY`
-- All 37 tools fully tested and production-ready
-- No breaking API changes - just the package name
+Renamed from `lightning-faucet-mcp`; env var renamed to `LIGHTNING_WALLET_API_KEY`.
 
-### Previous releases (as lightning-faucet-mcp)
+## Showcase
 
-See the [lightning-faucet-mcp changelog](https://www.npmjs.com/package/lightning-faucet-mcp) for v1.6.0 through v2.0.7 history.
-- Basic payments and invoices
-
-## Showcase: AI Agent Game Theory Experiment
-
-We ran a 100-round economic experiment with 16 AI agents (8 Claude, 8 GPT-4o) using real Bitcoin on Lightning. Agents could trade, form alliances, invest, and compete — all powered by this MCP server.
-
-**Results:** Agents completed 2,839 real Lightning transactions. Claude agents dominated through aggressive early trading while GPT-4o agents adopted conservative strategies.
-
-- **Experiment repo:** [github.com/pfergi42/lf-game-theory](https://github.com/pfergi42/lf-game-theory)
-- **Blog post:** [lightningfaucet.com/blog/ai-game-theory](https://lightningfaucet.com/blog/ai-game-theory)
+We ran a 100-round economic experiment with 16 AI agents (8 Claude, 8 GPT-4o) using real Bitcoin on Lightning through this server: 2,839 real Lightning transactions. Repo: [github.com/pfergi42/lf-game-theory](https://github.com/pfergi42/lf-game-theory).
 
 ## Support
 
-- **Documentation:** [lightningfaucet.com/ai-agents/docs](https://lightningfaucet.com/ai-agents/docs/)
-- **Demo:** [lightningfaucet.com/ai-agents/demo](https://lightningfaucet.com/ai-agents/demo/)
-- **Issues:** [github.com/lightningfaucet/lightning-wallet-mcp/issues](https://github.com/lightningfaucet/lightning-wallet-mcp/issues)
-- **Email:** support@lightningfaucet.com
+- Docs: [lightningfaucet.com/ai-agents/docs](https://lightningfaucet.com/ai-agents/docs/)
+- Demo: [lightningfaucet.com/ai-agents/demo](https://lightningfaucet.com/ai-agents/demo/)
+- Issues: [github.com/lightningfaucet/lightning-wallet-mcp/issues](https://github.com/lightningfaucet/lightning-wallet-mcp/issues)
+- Email: support@lightningfaucet.com
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
----
+MIT. See [LICENSE](LICENSE).
 
 **Built with Bitcoin** | [Lightning Faucet](https://lightningfaucet.com)
