@@ -353,7 +353,7 @@ async function cmdRecover(positional) {
     const code = positional[0];
     if (!code)
         error('Usage: lw recover <recovery_code>');
-    const r = await new lightning_faucet_js_1.LightningFaucetClient('').recoverAccount(code);
+    const r = await (0, lightning_faucet_js_1.recoverOperatorAccount)(code);
     const savedTo = (0, credentials_js_1.saveOperatorKey)(r.apiKey, { id: r.operatorId, recovery_code: code });
     return { operator_id: r.operatorId, api_key: r.apiKey, cooldown_until: r.cooldownUntil, credentials_saved_to: savedTo };
 }

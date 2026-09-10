@@ -10,6 +10,7 @@ exports.fetchWithTimeout = fetchWithTimeout;
 exports.registerOperator = registerOperator;
 exports.getPublicInfo = getPublicInfo;
 exports.getPublicDecodedInvoice = getPublicDecodedInvoice;
+exports.recoverOperatorAccount = recoverOperatorAccount;
 const pre_payment_hook_js_1 = require("./pre-payment-hook.js");
 const bolt11_js_1 = require("./bolt11.js");
 const node_crypto_1 = require("node:crypto");
@@ -541,28 +542,7 @@ class LightningFaucetClient {
      * Note: This is a static-like method but needs to use the request infrastructure
      */
     async recoverAccount(recoveryCode) {
-        // Recovery doesn't need auth, so we make a direct request
-        const response = await fetch(API_BASE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'recover',
-                recovery_code: recoveryCode,
-            }),
-        });
-        if (!response.ok) {
-            throw new Error(`Request failed (HTTP ${response.status})`);
-        }
-        const result = await response.json();
-        if (!result.success) {
-            throw new Error(result.error || 'Recovery failed');
-        }
-        return {
-            operatorId: result.operator_id || 0,
-            apiKey: result.api_key || '',
-            cooldownUntil: result.cooldown_until,
-            rawResponse: result,
-        };
+        return recoverOperatorAccount(recoveryCode);
     }
     /**
      * Rotate API key (operator or agent)
@@ -1030,6 +1010,34 @@ async function getPublicDecodedInvoice(bolt11) {
         expiresAt,
         isExpired,
         createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
+        rawResponse: result,
+    };
+}
+/**
+ * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
+ * outside the client class: callers must not need an API key to construct anything.
+ */
+async function recoverOperatorAccount(recoveryCode) {
+    // Recovery doesn't need auth, so we make a direct request
+    const response = await fetchWithTimeout(API_BASE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'recover',
+            recovery_code: recoveryCode,
+        }),
+    });
+    if (!response.ok) {
+        throw new Error(`Request failed (HTTP ${response.status})`);
+    }
+    const result = await response.json();
+    if (!result.success) {
+        throw new Error(result.error || 'Recovery failed');
+    }
+    return {
+        operatorId: result.operator_id || 0,
+        apiKey: result.api_key || '',
+        cooldownUntil: result.cooldown_until,
         rawResponse: result,
     };
 }

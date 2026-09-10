@@ -933,36 +933,7 @@ export class LightningFaucetClient {
     cooldownUntil?: string;
     rawResponse: ApiResponse;
   }> {
-    // Recovery doesn't need auth, so we make a direct request
-    const response = await fetch(API_BASE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'recover',
-        recovery_code: recoveryCode,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Request failed (HTTP ${response.status})`);
-    }
-
-    const result = await response.json() as ApiResponse & {
-      operator_id?: number;
-      api_key?: string;
-      cooldown_until?: string;
-    };
-
-    if (!result.success) {
-      throw new Error(result.error || 'Recovery failed');
-    }
-
-    return {
-      operatorId: result.operator_id || 0,
-      apiKey: result.api_key || '',
-      cooldownUntil: result.cooldown_until,
-      rawResponse: result,
-    };
+    return recoverOperatorAccount(recoveryCode);
   }
 
   /**
@@ -1759,6 +1730,48 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
     expiresAt,
     isExpired,
     createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
+    rawResponse: result,
+  };
+}
+
+/**
+ * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
+ * outside the client class: callers must not need an API key to construct anything.
+ */
+export async function recoverOperatorAccount(recoveryCode: string): Promise<{
+  operatorId: number;
+  apiKey: string;
+  cooldownUntil?: string;
+  rawResponse: ApiResponse;
+}> {
+  // Recovery doesn't need auth, so we make a direct request
+  const response = await fetchWithTimeout(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'recover',
+      recovery_code: recoveryCode,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+
+  const result = await response.json() as ApiResponse & {
+    operator_id?: number;
+    api_key?: string;
+    cooldown_until?: string;
+  };
+
+  if (!result.success) {
+    throw new Error(result.error || 'Recovery failed');
+  }
+
+  return {
+    operatorId: result.operator_id || 0,
+    apiKey: result.api_key || '',
+    cooldownUntil: result.cooldown_until,
     rawResponse: result,
   };
 }

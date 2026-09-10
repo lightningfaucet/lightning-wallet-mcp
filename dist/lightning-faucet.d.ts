@@ -587,4 +587,14 @@ export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt?: string;
     rawResponse: ApiResponse;
 }>;
+/**
+ * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
+ * outside the client class: callers must not need an API key to construct anything.
+ */
+export declare function recoverOperatorAccount(recoveryCode: string): Promise<{
+    operatorId: number;
+    apiKey: string;
+    cooldownUntil?: string;
+    rawResponse: ApiResponse;
+}>;
 export {};

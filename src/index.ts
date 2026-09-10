@@ -22,7 +22,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { LightningFaucetClient, ApiError, registerOperator, getPublicInfo, getPublicDecodedInvoice } from './lightning-faucet.js';
+import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice } from './lightning-faucet.js';
 import {
   loadCredentials,
   activeStoredKey,
@@ -747,7 +747,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           agent_id: { type: 'integer', description: 'Agent ID to sweep funds from' },
-          amount_sats: { type: 'integer', description: 'Amount in sats (use large number for full balance)' },
+          amount_sats: {
+            oneOf: [
+              { type: 'integer', minimum: 1, description: 'Amount in sats to move back to the operator' },
+              { type: 'string', enum: ['all'], description: 'Sweep the full agent balance' },
+            ],
+            description: 'Amount in sats, or the string "all" to sweep the full balance',
+          },
         },
         required: ['agent_id', 'amount_sats'],
       },
@@ -1471,9 +1477,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ==========================================
       case 'recover_account': {
         const parsed = RecoverAccountSchema.parse(args ?? {});
-        // Recovery doesn't need an existing API key — recoverAccount() uses its own fetch
-        const tempClient = session.getClient() || new LightningFaucetClient('recovery-placeholder');
-        const result = await tempClient.recoverAccount(parsed.recovery_code);
+        // Recovery is unauthenticated: no client (and no placeholder key) is needed.
+        const result = await recoverOperatorAccount(parsed.recovery_code);
         // Auto-switch to the new key
         session.setClient(new LightningFaucetClient(result.apiKey));
         session.keySource = 'file';
@@ -1624,7 +1629,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'create_withdraw_link': {
         const { amount_sats: amountSats } = z.object({
-          amount_sats: z.coerce.number().int().min(100).optional(),
+          amount_sats: z.coerce.number().int().min(10).optional(),
         }).parse(args ?? {});
         const result = await session.requireClient().createWithdrawLink(amountSats);
         return {

@@ -9,7 +9,7 @@
  * Usage: lw <command> [options]
  */
 
-import { LightningFaucetClient, registerOperator, getPublicInfo } from './lightning-faucet.js';
+import { LightningFaucetClient, registerOperator, recoverOperatorAccount, getPublicInfo } from './lightning-faucet.js';
 import { loadCredentials, activeStoredKey, saveOperatorKey, saveAgentKey, forgetCredentials, describeCredentials, credentialsPath } from './credentials.js';
 const VERSION: string = (() => {
   try { return (require('../package.json') as { version: string }).version; } catch { return '0.0.0'; }
@@ -358,7 +358,7 @@ async function cmdSetBudget(positional: string[]): Promise<unknown> {
 async function cmdRecover(positional: string[]): Promise<unknown> {
   const code = positional[0];
   if (!code) error('Usage: lw recover <recovery_code>');
-  const r = await new LightningFaucetClient('').recoverAccount(code);
+  const r = await recoverOperatorAccount(code);
   const savedTo = saveOperatorKey(r.apiKey, { id: r.operatorId, recovery_code: code });
   return { operator_id: r.operatorId, api_key: r.apiKey, cooldown_until: r.cooldownUntil, credentials_saved_to: savedTo };
 }
