@@ -1,0 +1,34 @@
+# Publish server.json to the official MCP registry via GitHub OIDC. The registry grants the
+# io.github.<owner> namespace to workflows running in that owner's repositories, so no device
+# login, no public org membership, no stored token. Run after the npm version is live.
+name: mcp-registry
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+          mcp-publisher --version
+      - name: Wait until npm serves the version in server.json
+        run: |
+          V="$(node -p "require('./server.json').version")"
+          for i in $(seq 1 20); do
+            if [ "$(npm view lightning-wallet-mcp@"$V" version 2>/dev/null)" = "$V" ]; then echo "npm has $V"; exit 0; fi
+            echo "npm does not have $V yet, retry $i"; sleep 30
+          done
+          echo "npm never served $V"; exit 1
+      - run: mcp-publisher login github-oidc
+      - run: mcp-publisher publish
