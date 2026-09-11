@@ -962,18 +962,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           parsed.body,
           parsed.max_payment_sats
         );
-        // Determine if the target returned a success response
-        const targetSuccess = result.statusCode >= 200 && result.statusCode < 300;
-        const message = targetSuccess
-          ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
-          : `Target returned HTTP ${result.statusCode}`;
+        // Determine if the target returned a success response. A first-party endpoint can answer
+        // HTTP 200 with {success:false, refunded:true} when the service itself failed after the
+        // payment was taken; the backend refunds it, so report that instead of "paid N sats".
+        const targetBody = (result.data && typeof result.data === 'object') ? (result.data as Record<string, unknown>) : null;
+        const serviceRefunded = targetBody?.refunded === true || (targetBody?.success === false && targetBody?.paid_sats === 0);
+        const targetSuccess = result.statusCode >= 200 && result.statusCode < 300 && !serviceRefunded;
+        const message = serviceRefunded
+          ? `Endpoint returned an error (${String(targetBody?.error ?? 'unknown')}); the ${result.amountPaid ?? 0} sats were refunded`
+          : targetSuccess
+            ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
+            : `Target returned HTTP ${result.statusCode}`;
         const responseData: Record<string, unknown> = {
           success: targetSuccess,
           message,
           status_code: result.statusCode,
           data: result.data,
           payment_hash: result.paymentHash,
-          amount_paid: result.amountPaid,
+          amount_paid: serviceRefunded ? 0 : result.amountPaid,
+          ...(serviceRefunded ? { refunded_sats: result.amountPaid ?? 0 } : {}),
           fee: result.fee,
         };
         if (result.paymentProtocol) {
