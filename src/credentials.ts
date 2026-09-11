@@ -84,10 +84,22 @@ function base(): CredentialsFile {
   return loadCredentials() || { version: 1, active: 'operator' };
 }
 
-/** Save (and activate) an operator key. Returns the file path written, or null if not persisted. */
-export function saveOperatorKey(apiKey: string, extra: { id?: number; name?: string; recovery_code?: string } = {}): string | null {
+/**
+ * Save (and activate) an operator key. Returns the file path written, or null if not persisted.
+ * Metadata (id, name, recovery_code) already on file is kept when the key is unchanged, or when
+ * `rotatedFrom` names the key that was just rotated AND that key is the one on file (so a
+ * rotation of the env-var account never inherits another operator's recovery code from the
+ * file). Any other key change is treated as a different account and starts clean.
+ */
+export function saveOperatorKey(
+  apiKey: string,
+  extra: { id?: number; name?: string; recovery_code?: string } = {},
+  opts: { rotatedFrom?: string } = {},
+): string | null {
   const creds = base();
-  const prev = creds.operator && creds.operator.api_key === apiKey ? creds.operator : undefined;
+  const storedKey = creds.operator?.api_key;
+  const sameAccount = storedKey !== undefined && (storedKey === apiKey || (opts.rotatedFrom !== undefined && storedKey === opts.rotatedFrom));
+  const prev = sameAccount ? creds.operator : undefined;
   creds.operator = {
     api_key: apiKey,
     id: extra.id ?? prev?.id,
