@@ -59,6 +59,10 @@ function safeStringify(value) {
 }
 class LightningFaucetClient {
     apiKey;
+    /** The key this client authenticates with (used to decide whose stored metadata a rotation may keep). */
+    getApiKey() {
+        return this.apiKey;
+    }
     agentIdCache;
     constructor(apiKey) {
         if (!apiKey) {

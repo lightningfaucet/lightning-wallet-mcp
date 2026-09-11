@@ -1502,14 +1502,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'rotate_api_key': {
         const parsed = RotateApiKeySchema.parse(args ?? {});
-        const result = await session.requireClient().rotateApiKey(parsed.agent_id);
+        const rotatingClient = session.requireClient();
+        const previousKey = rotatingClient.getApiKey();
+        const result = await rotatingClient.rotateApiKey(parsed.agent_id);
         // Auto-switch to the new key
         session.setClient(new LightningFaucetClient(result.apiKey));
         session.keySource = 'file';
-        // Rotation is the same account: carry the stored id, name and recovery code forward.
+        // Carry the stored id, name and recovery code forward only if the key on file is the one
+        // that was just rotated (an env-var account must not inherit another operator's file entry).
         const rotSavedTo = parsed.agent_id
           ? saveAgentKey(result.apiKey, { id: parsed.agent_id }, true)
-          : saveOperatorKey(result.apiKey, {}, { sameAccount: true });
+          : saveOperatorKey(result.apiKey, {}, { rotatedFrom: previousKey });
         return {
           content: [
             {

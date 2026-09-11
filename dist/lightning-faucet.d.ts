@@ -125,6 +125,8 @@ interface WhoamiResponse extends ApiResponse {
 }
 export declare class LightningFaucetClient {
     private apiKey;
+    /** The key this client authenticates with (used to decide whose stored metadata a rotation may keep). */
+    getApiKey(): string;
     private agentIdCache;
     constructor(apiKey: string);
     /**

@@ -121,12 +121,15 @@ function base() {
 /**
  * Save (and activate) an operator key. Returns the file path written, or null if not persisted.
  * Metadata (id, name, recovery_code) already on file is kept when the key is unchanged, or when
- * `sameAccount` says the new key belongs to the same operator (key rotation). A different key
- * without that flag is treated as a different account and starts clean.
+ * `rotatedFrom` names the key that was just rotated AND that key is the one on file (so a
+ * rotation of the env-var account never inherits another operator's recovery code from the
+ * file). Any other key change is treated as a different account and starts clean.
  */
 function saveOperatorKey(apiKey, extra = {}, opts = {}) {
     const creds = base();
-    const prev = creds.operator && (creds.operator.api_key === apiKey || opts.sameAccount) ? creds.operator : undefined;
+    const storedKey = creds.operator?.api_key;
+    const sameAccount = storedKey !== undefined && (storedKey === apiKey || (opts.rotatedFrom !== undefined && storedKey === opts.rotatedFrom));
+    const prev = sameAccount ? creds.operator : undefined;
     creds.operator = {
         api_key: apiKey,
         id: extra.id ?? prev?.id,

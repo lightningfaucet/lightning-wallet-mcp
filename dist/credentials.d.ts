@@ -25,15 +25,16 @@ export declare function activeStoredKey(creds: CredentialsFile | null): {
 /**
  * Save (and activate) an operator key. Returns the file path written, or null if not persisted.
  * Metadata (id, name, recovery_code) already on file is kept when the key is unchanged, or when
- * `sameAccount` says the new key belongs to the same operator (key rotation). A different key
- * without that flag is treated as a different account and starts clean.
+ * `rotatedFrom` names the key that was just rotated AND that key is the one on file (so a
+ * rotation of the env-var account never inherits another operator's recovery code from the
+ * file). Any other key change is treated as a different account and starts clean.
  */
 export declare function saveOperatorKey(apiKey: string, extra?: {
     id?: number;
     name?: string;
     recovery_code?: string;
 }, opts?: {
-    sameAccount?: boolean;
+    rotatedFrom?: string;
 }): string | null;
 /** Save an agent key. Activates it only when `activate` is true (set_agent_credentials); create_agent just records it. */
 export declare function saveAgentKey(apiKey: string, extra?: {
