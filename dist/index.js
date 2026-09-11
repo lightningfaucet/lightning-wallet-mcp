@@ -890,14 +890,16 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'pay_l402_api': {
                 const parsed = PayL402ApiSchema.parse(args ?? {});
                 const result = await session.requireClient().l402Pay(parsed.url, parsed.method, parsed.body, parsed.max_payment_sats);
-                // Determine if the target returned a success response. A first-party endpoint can answer
-                // HTTP 200 with {success:false, refunded:true} when the service itself failed after the
-                // payment was taken; the backend refunds it, so report that instead of "paid N sats".
-                const targetBody = (result.data && typeof result.data === 'object') ? result.data : null;
-                const serviceRefunded = targetBody?.refunded === true || (targetBody?.success === false && targetBody?.paid_sats === 0);
+                // Determine if the target returned a success response. The target body is application
+                // data (any URL can be paid), so a refund is only ever read from the backend's own
+                // payment record: the wallet sets payment.refunded when it took a payment and gave it
+                // back because a first-party service failed after the debit.
+                const backendPayment = (result.rawResponse?.payment ?? null);
+                const serviceRefunded = backendPayment?.refunded === true;
+                const refundedSats = serviceRefunded ? Number(backendPayment?.refund_sats ?? result.amountPaid ?? 0) : 0;
                 const targetSuccess = result.statusCode >= 200 && result.statusCode < 300 && !serviceRefunded;
                 const message = serviceRefunded
-                    ? `Endpoint returned an error (${String(targetBody?.error ?? 'unknown')}); the ${result.amountPaid ?? 0} sats were refunded`
+                    ? `The endpoint failed after payment; the wallet refunded ${refundedSats} sats`
                     : targetSuccess
                         ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
                         : `Target returned HTTP ${result.statusCode}`;
@@ -908,7 +910,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     data: result.data,
                     payment_hash: result.paymentHash,
                     amount_paid: serviceRefunded ? 0 : result.amountPaid,
-                    ...(serviceRefunded ? { refunded_sats: result.amountPaid ?? 0 } : {}),
+                    ...(serviceRefunded ? { refunded_sats: refundedSats } : {}),
                     fee: result.fee,
                 };
                 if (result.paymentProtocol) {

@@ -962,18 +962,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           parsed.body,
           parsed.max_payment_sats
         );
-        // Determine if the target returned a success response
-        const targetSuccess = result.statusCode >= 200 && result.statusCode < 300;
-        const message = targetSuccess
-          ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
-          : `Target returned HTTP ${result.statusCode}`;
+        // Determine if the target returned a success response. The target body is application
+        // data (any URL can be paid), so a refund is only ever read from the backend's own
+        // payment record: the wallet sets payment.refunded when it took a payment and gave it
+        // back because a first-party service failed after the debit.
+        const backendPayment = ((result.rawResponse as unknown as Record<string, unknown>)?.payment ?? null) as Record<string, unknown> | null;
+        const serviceRefunded = backendPayment?.refunded === true;
+        const refundedSats = serviceRefunded ? Number(backendPayment?.refund_sats ?? result.amountPaid ?? 0) : 0;
+        const targetSuccess = result.statusCode >= 200 && result.statusCode < 300 && !serviceRefunded;
+        const message = serviceRefunded
+          ? `The endpoint failed after payment; the wallet refunded ${refundedSats} sats`
+          : targetSuccess
+            ? (result.amountPaid ? `Request completed with payment of ${result.amountPaid} sats` : 'Request completed (no payment required)')
+            : `Target returned HTTP ${result.statusCode}`;
         const responseData: Record<string, unknown> = {
           success: targetSuccess,
           message,
           status_code: result.statusCode,
           data: result.data,
           payment_hash: result.paymentHash,
-          amount_paid: result.amountPaid,
+          amount_paid: serviceRefunded ? 0 : result.amountPaid,
+          ...(serviceRefunded ? { refunded_sats: refundedSats } : {}),
           fee: result.fee,
         };
         if (result.paymentProtocol) {
