@@ -199,6 +199,10 @@ Payments always execute through an agent wallet on the backend, which is where b
 
 ## Changelog
 
+### v1.6.1 (2026-09-11)
+
+`pay_l402_api` reports a first-party call that the backend refunded (for example an upstream fetch that failed after payment) as not paid, with `refunded_sats`, instead of a paid success. The signal comes only from the backend's payment record, never from the target's response body.
+
 ### v1.6.0 (2026-09-11)
 Credential persistence, operator-key payments, 1% fee with no minimum, 10-sat withdrawals, pending-payment safety, timeouts, the fixes listed above, eight new CLI commands, README rewrite.
 
