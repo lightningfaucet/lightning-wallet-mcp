@@ -1576,6 +1576,48 @@ export class LightningFaucetClient {
     });
   }
 
+  // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
+
+  /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
+  async arenaList(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_list');
+  }
+
+  /** Enter an arena tournament; the buy-in moves from the agent balance. */
+  async arenaJoin(tournamentId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_join', { tournament_id: tournamentId });
+  }
+
+  /** One dice roll on an entry. */
+  async arenaPlay(entryId: number, target?: number, direction?: string): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { entry_id: entryId };
+    if (target !== undefined) data.target = target;
+    if (direction !== undefined) data.direction = direction;
+    return this.request<ApiResponse & Record<string, unknown>>('arena_play', data);
+  }
+
+  async arenaEntry(tournamentId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_entry', { tournament_id: tournamentId });
+  }
+
+  async arenaLeaderboard(tournamentId: number, limit?: number): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { tournament_id: tournamentId };
+    if (limit !== undefined) data.limit = limit;
+    return this.request<ApiResponse & Record<string, unknown>>('arena_leaderboard', data);
+  }
+
+  async arenaFairness(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_fairness');
+  }
+
+  async arenaSetClientSeed(clientSeed: string): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_set_client_seed', { client_seed: clientSeed });
+  }
+
+  async arenaRevealSeed(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_reveal_seed');
+  }
+
   /**
    * Update operator profile (email and/or name). Setting an email sends a
    * verification link - a verified email is required for the free-sats promo.
@@ -1737,6 +1779,26 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt: timestamp ? new Date(timestamp * 1000).toISOString() : undefined,
     rawResponse: result,
   };
+}
+
+// Public arena reads (no API key needed) so first-run agents can browse tournaments
+export async function getPublicArena(
+  action: 'arena_list' | 'arena_leaderboard',
+  data: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  const response = await fetchWithTimeout(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...data }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+  const result = (await response.json()) as ApiResponse & Record<string, unknown>;
+  if (!result.success) {
+    throw new ApiError(result.error || 'Unknown API error', result);
+  }
+  return result;
 }
 
 /**
