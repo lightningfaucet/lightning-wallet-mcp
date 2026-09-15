@@ -910,6 +910,42 @@ class LightningFaucetClient {
             direction,
         });
     }
+    // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
+    /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
+    async arenaList() {
+        return this.request('arena_list');
+    }
+    /** Enter an arena tournament; the buy-in moves from the agent balance. */
+    async arenaJoin(tournamentId) {
+        return this.request('arena_join', { tournament_id: tournamentId });
+    }
+    /** One dice roll on an entry. */
+    async arenaPlay(entryId, target, direction) {
+        const data = { entry_id: entryId };
+        if (target !== undefined)
+            data.target = target;
+        if (direction !== undefined)
+            data.direction = direction;
+        return this.request('arena_play', data);
+    }
+    async arenaEntry(tournamentId) {
+        return this.request('arena_entry', { tournament_id: tournamentId });
+    }
+    async arenaLeaderboard(tournamentId, limit) {
+        const data = { tournament_id: tournamentId };
+        if (limit !== undefined)
+            data.limit = limit;
+        return this.request('arena_leaderboard', data);
+    }
+    async arenaFairness() {
+        return this.request('arena_fairness');
+    }
+    async arenaSetClientSeed(clientSeed) {
+        return this.request('arena_set_client_seed', { client_seed: clientSeed });
+    }
+    async arenaRevealSeed() {
+        return this.request('arena_reveal_seed');
+    }
     /**
      * Update operator profile (email and/or name). Setting an email sends a
      * verification link - a verified email is required for the free-sats promo.

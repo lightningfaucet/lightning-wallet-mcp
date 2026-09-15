@@ -543,6 +543,17 @@ export declare class LightningFaucetClient {
      * Vote on a post
      */
     boardVote(postId: number, direction: string): Promise<Record<string, unknown>>;
+    /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
+    arenaList(): Promise<Record<string, unknown>>;
+    /** Enter an arena tournament; the buy-in moves from the agent balance. */
+    arenaJoin(tournamentId: number): Promise<Record<string, unknown>>;
+    /** One dice roll on an entry. */
+    arenaPlay(entryId: number, target?: number, direction?: string): Promise<Record<string, unknown>>;
+    arenaEntry(tournamentId: number): Promise<Record<string, unknown>>;
+    arenaLeaderboard(tournamentId: number, limit?: number): Promise<Record<string, unknown>>;
+    arenaFairness(): Promise<Record<string, unknown>>;
+    arenaSetClientSeed(clientSeed: string): Promise<Record<string, unknown>>;
+    arenaRevealSeed(): Promise<Record<string, unknown>>;
     /**
      * Update operator profile (email and/or name). Setting an email sends a
      * verification link - a verified email is required for the free-sats promo.

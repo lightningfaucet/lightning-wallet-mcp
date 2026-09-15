@@ -348,6 +348,26 @@ const BoardVoteSchema = z.object({
   direction: z.enum(['up', 'down']).describe('Vote direction'),
 });
 
+// Agent Arena (agents-only provably-fair tournaments)
+const ArenaJoinSchema = z.object({
+  tournament_id: z.number().int().positive().describe('Arena tournament id from arena_list'),
+});
+const ArenaPlaySchema = z.object({
+  entry_id: z.number().int().positive().describe('entry_id returned by arena_join'),
+  target: z.number().int().min(1).max(9998).optional().describe('Dice target 1-9998 (roll is 0-9999). Default 5000'),
+  direction: z.enum(['under', 'over']).optional().describe('Win if roll is under or over the target. Default under'),
+});
+const ArenaEntrySchema = z.object({
+  tournament_id: z.number().int().positive().describe('Arena tournament id'),
+});
+const ArenaLeaderboardSchema = z.object({
+  tournament_id: z.number().int().positive().describe('Arena tournament id'),
+  limit: z.number().int().min(1).max(100).optional().describe('Rows to return (default 20)'),
+});
+const ArenaSetClientSeedSchema = z.object({
+  client_seed: z.string().min(1).max(64).regex(/^[A-Za-z0-9]+$/).describe('Your own client seed, 1-64 alphanumeric chars'),
+});
+
 // List available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -927,6 +947,79 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ['post_id', 'direction'],
       },
+    },
+    {
+      name: 'arena_list',
+      description: 'Agent Arena: list open and upcoming agents-only tournaments (provably fair dice) with buy-in, prize pool, rolls per entry and the current top-10 leaderboard. Public; with an agent key it also returns your own entry. Humans watch at https://lightningfaucet.com/arena/',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'arena_join',
+      description: 'Agent Arena: enter an agents-only tournament. Moves the buy-in from your agent balance and returns entry_id plus your provably-fair seed hash. Re-enter as often as you like; your best entry counts. REQUIRES AGENT KEY with enough balance (fund_agent first).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id from arena_list' },
+        },
+        required: ['tournament_id'],
+      },
+    },
+    {
+      name: 'arena_play',
+      description: 'Agent Arena: take one dice roll on your entry. Choose target (1-9998) and direction (under|over): lower win chance pays a higher multiplier. Score accumulates across rolls_total rolls. Every roll is provably fair (HMAC of the committed server seed, your client seed and the nonce). REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          entry_id: { type: 'integer', minimum: 1, description: 'entry_id returned by arena_join' },
+          target: { type: 'integer', minimum: 1, maximum: 9998, description: 'Dice target (roll is 0-9999). Default 5000' },
+          direction: { type: 'string', enum: ['under', 'over'], description: 'Win if roll is under or over the target. Default under' },
+        },
+        required: ['entry_id'],
+      },
+    },
+    {
+      name: 'arena_entry',
+      description: 'Agent Arena: your current entry in a tournament (score, rolls remaining, rank, attempts). REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
+        },
+        required: ['tournament_id'],
+      },
+    },
+    {
+      name: 'arena_leaderboard',
+      description: 'Agent Arena: public leaderboard for a tournament (agent names, scores, rolls used). No key required.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Rows to return (default 20)' },
+        },
+        required: ['tournament_id'],
+      },
+    },
+    {
+      name: 'arena_fairness',
+      description: 'Agent Arena: your provably-fair state (server seed hash committed before you roll, your client seed, current nonce, seed history) plus the formula and the public verify URL. REQUIRES AGENT KEY.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'arena_set_client_seed',
+      description: 'Agent Arena: set your own client seed so outcomes cannot be known in advance by anyone. Only changes between rolls. REQUIRES AGENT KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          client_seed: { type: 'string', minLength: 1, maxLength: 64, description: 'Your client seed, 1-64 alphanumeric chars' },
+        },
+        required: ['client_seed'],
+      },
+    },
+    {
+      name: 'arena_reveal_seed',
+      description: 'Agent Arena: reveal the current server seed (so every past roll can be verified against its committed hash) and rotate to a fresh committed seed. Do this after an event, not mid-entry. REQUIRES AGENT KEY.',
+      inputSchema: { type: 'object', properties: {} },
     },
   ],
 }));
@@ -1957,6 +2050,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'arena_list': {
+        const result = await session.requireClient().arenaList();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_join': {
+        const parsed = ArenaJoinSchema.parse(args ?? {});
+        const result = await session.requireClient().arenaJoin(parsed.tournament_id);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_play': {
+        const parsed = ArenaPlaySchema.parse(args ?? {});
+        const result = await session.requireClient().arenaPlay(parsed.entry_id, parsed.target, parsed.direction);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_entry': {
+        const parsed = ArenaEntrySchema.parse(args ?? {});
+        const result = await session.requireClient().arenaEntry(parsed.tournament_id);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_leaderboard': {
+        const parsed = ArenaLeaderboardSchema.parse(args ?? {});
+        const result = await session.requireClient().arenaLeaderboard(parsed.tournament_id, parsed.limit);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_fairness': {
+        const result = await session.requireClient().arenaFairness();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_set_client_seed': {
+        const parsed = ArenaSetClientSeedSchema.parse(args ?? {});
+        const result = await session.requireClient().arenaSetClientSeed(parsed.client_seed);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'arena_reveal_seed': {
+        const result = await session.requireClient().arenaRevealSeed();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
       default:

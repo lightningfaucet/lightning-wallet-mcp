@@ -1576,6 +1576,48 @@ export class LightningFaucetClient {
     });
   }
 
+  // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
+
+  /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
+  async arenaList(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_list');
+  }
+
+  /** Enter an arena tournament; the buy-in moves from the agent balance. */
+  async arenaJoin(tournamentId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_join', { tournament_id: tournamentId });
+  }
+
+  /** One dice roll on an entry. */
+  async arenaPlay(entryId: number, target?: number, direction?: string): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { entry_id: entryId };
+    if (target !== undefined) data.target = target;
+    if (direction !== undefined) data.direction = direction;
+    return this.request<ApiResponse & Record<string, unknown>>('arena_play', data);
+  }
+
+  async arenaEntry(tournamentId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_entry', { tournament_id: tournamentId });
+  }
+
+  async arenaLeaderboard(tournamentId: number, limit?: number): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { tournament_id: tournamentId };
+    if (limit !== undefined) data.limit = limit;
+    return this.request<ApiResponse & Record<string, unknown>>('arena_leaderboard', data);
+  }
+
+  async arenaFairness(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_fairness');
+  }
+
+  async arenaSetClientSeed(clientSeed: string): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_set_client_seed', { client_seed: clientSeed });
+  }
+
+  async arenaRevealSeed(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('arena_reveal_seed');
+  }
+
   /**
    * Update operator profile (email and/or name). Setting an email sends a
    * verification link - a verified email is required for the free-sats promo.
