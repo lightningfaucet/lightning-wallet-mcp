@@ -22,7 +22,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice } from './lightning-faucet.js';
+import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice, getPublicArena } from './lightning-faucet.js';
 import {
   loadCredentials,
   activeStoredKey,
@@ -2053,7 +2053,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'arena_list': {
-        const result = await session.requireClient().arenaList();
+        // Public read: fall back to an unauthenticated request when no key is configured.
+        const arenaClient = session.getClient();
+        const result = arenaClient ? await arenaClient.arenaList() : await getPublicArena('arena_list');
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 
@@ -2077,7 +2079,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'arena_leaderboard': {
         const parsed = ArenaLeaderboardSchema.parse(args ?? {});
-        const result = await session.requireClient().arenaLeaderboard(parsed.tournament_id, parsed.limit);
+        const arenaClient = session.getClient();
+        const result = arenaClient
+          ? await arenaClient.arenaLeaderboard(parsed.tournament_id, parsed.limit)
+          : await getPublicArena('arena_leaderboard', {
+              tournament_id: parsed.tournament_id,
+              ...(parsed.limit !== undefined ? { limit: parsed.limit } : {}),
+            });
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 

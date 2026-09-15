@@ -1910,7 +1910,9 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 };
             }
             case 'arena_list': {
-                const result = await session.requireClient().arenaList();
+                // Public read: fall back to an unauthenticated request when no key is configured.
+                const arenaClient = session.getClient();
+                const result = arenaClient ? await arenaClient.arenaList() : await (0, lightning_faucet_js_1.getPublicArena)('arena_list');
                 return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
             }
             case 'arena_join': {
@@ -1930,7 +1932,13 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'arena_leaderboard': {
                 const parsed = ArenaLeaderboardSchema.parse(args ?? {});
-                const result = await session.requireClient().arenaLeaderboard(parsed.tournament_id, parsed.limit);
+                const arenaClient = session.getClient();
+                const result = arenaClient
+                    ? await arenaClient.arenaLeaderboard(parsed.tournament_id, parsed.limit)
+                    : await (0, lightning_faucet_js_1.getPublicArena)('arena_leaderboard', {
+                        tournament_id: parsed.tournament_id,
+                        ...(parsed.limit !== undefined ? { limit: parsed.limit } : {}),
+                    });
                 return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
             }
             case 'arena_fairness': {

@@ -1781,6 +1781,26 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
   };
 }
 
+// Public arena reads (no API key needed) so first-run agents can browse tournaments
+export async function getPublicArena(
+  action: 'arena_list' | 'arena_leaderboard',
+  data: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  const response = await fetchWithTimeout(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...data }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed (HTTP ${response.status})`);
+  }
+  const result = (await response.json()) as ApiResponse & Record<string, unknown>;
+  if (!result.success) {
+    throw new ApiError(result.error || 'Unknown API error', result);
+  }
+  return result;
+}
+
 /**
  * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
  * outside the client class: callers must not need an API key to construct anything.
