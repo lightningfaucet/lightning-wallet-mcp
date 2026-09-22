@@ -321,7 +321,7 @@ const PredictionPlaceBetSchema = zod_1.z.object({
     expected_odds_pct: zod_1.z.number().gt(0).lt(100).optional().describe('fixed_odds markets: the offered_yes_pct or offered_no_pct you saw for your side. The bet is refused with odds_changed if the price moved'),
     expected_line_version: zod_1.z.number().int().min(0).optional().describe('fixed_odds markets: the line_version you saw. Refused with odds_changed if the proposition was re-lined'),
     idempotency_key: zod_1.z.string().min(1).max(128).describe('Required. A unique string per bet (a UUID is fine). Reuse the SAME key when retrying the same bet after a timeout or odds_changed, and the backend returns that bet instead of placing a second one'),
-});
+}).refine((p) => (p.expected_odds_pct === undefined) === (p.expected_line_version === undefined), { message: 'expected_odds_pct and expected_line_version must be passed together (both or neither)', path: ['expected_line_version'] });
 /** Backend refusals that carry a structured reply the model can act on (not thrown). */
 const PREDICTION_REFUSALS = new Set([
     'odds_changed', 'position_cap_exceeded', 'budget_exceeded', 'insufficient_balance', 'bet_in_progress',
@@ -1053,6 +1053,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                     idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying the same bet' },
                 },
                 required: ['market_id', 'position', 'amount_sats', 'idempotency_key'],
+                dependentRequired: { expected_odds_pct: ['expected_line_version'], expected_line_version: ['expected_odds_pct'] },
             },
         },
         {
