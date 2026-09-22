@@ -21,7 +21,6 @@ const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const zod_1 = require("zod");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
-const node_crypto_1 = require("node:crypto");
 const credentials_js_1 = require("./credentials.js");
 // Package is built as CommonJS, so a plain require resolves ../package.json at runtime.
 const PKG_VERSION = (() => {
@@ -321,7 +320,7 @@ const PredictionPlaceBetSchema = zod_1.z.object({
     amount_sats: zod_1.z.number().int().positive().describe('Stake in sats, taken from the agent balance'),
     expected_odds_pct: zod_1.z.number().gt(0).lt(100).optional().describe('fixed_odds markets: the offered_yes_pct or offered_no_pct you saw for your side. The bet is refused with odds_changed if the price moved'),
     expected_line_version: zod_1.z.number().int().min(0).optional().describe('fixed_odds markets: the line_version you saw. Refused with odds_changed if the proposition was re-lined'),
-    idempotency_key: zod_1.z.string().min(1).max(128).optional().describe('Unique per bet; reuse it on retry to get the same bet back instead of a second one. Generated for you if omitted'),
+    idempotency_key: zod_1.z.string().min(1).max(128).describe('Required. A unique string per bet (a UUID is fine). Reuse the SAME key when retrying the same bet after a timeout or odds_changed, and the backend returns that bet instead of placing a second one'),
 });
 /** Backend refusals that carry a structured reply the model can act on (not thrown). */
 const PREDICTION_REFUSALS = new Set([
@@ -355,135 +354,6 @@ function predictionNextHint(error) {
         default:
             return 'Read the message field, adjust the stake or market, and retry with a fresh idempotency_key.';
     }
-}
-/**
- * Idempotency keys for prediction_place_bet calls that omitted one. A model that
- * retries the same tool call after a timeout must land on the SAME key, or the
- * backend sees a second bet. Keyed by the bet's own fields (market, side, stake,
- * expected price/line) so an identical retry reuses the key; a different bet
- * gets a fresh one. Entries expire after 15 minutes, and are dropped once a bet
- * is confirmed so a deliberate second identical bet is placed, not replayed.
- */
-const GENERATED_BET_KEYS = new Map();
-const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
-/**
- * The cache is scoped to the credential that places the bet. set_agent_credentials
- * can switch agents mid-session, and two agents submitting the same fields are two
- * different bets: neither may inherit, or retire, the other's generated key.
- */
-function betScope(apiKey) {
-    return (0, node_crypto_1.createHash)('sha256').update(apiKey).digest('hex').slice(0, 16);
-}
-/**
- * Carry one credential's cached keys over to its replacement. Called only when the
- * SAME identity rotates its own key: the agent is unchanged, so a key-less retry of
- * an in-flight bet must still land on the original idempotency key instead of
- * generating a second one and duplicating a bet that may already have been placed.
- * Never call this with the operator's own key as `fromScope` when an AGENT's key was
- * rotated — that switches identity, and the agent would inherit the operator's bets.
- */
-function rescopeGeneratedBetKeys(fromScope, toScope) {
-    if (fromScope === toScope)
-        return;
-    for (const [fingerprint, entry] of [...GENERATED_BET_KEYS]) {
-        if (entry.scope !== fromScope)
-            continue;
-        GENERATED_BET_KEYS.delete(fingerprint);
-        GENERATED_BET_KEYS.set(betFingerprint(toScope, entry.bet), { ...entry, scope: toScope });
-    }
-}
-/**
- * The keys an agent was using before `rotate_api_key({agent_id})` replaced it, but only
- * when this session or the credentials file positively identifies it as that agent's.
- * Rotating an agent from the operator switches the session's identity, so without this
- * the agent's own pending bet keys would be stranded under its old scope and a key-less
- * retry would mint a second key for a bet that may already have landed. An unidentified
- * (or different) agent entry contributes nothing rather than risk migrating another
- * identity's keys.
- */
-function rotatedAgentPreviousKeys(agentId) {
-    const agent = (0, credentials_js_1.loadCredentials)()?.agent;
-    // The file can be stale (persistence off, or a failed write) while the session holds a
-    // newer key for the same agent: rescope from every key known to be this agent's.
-    const keys = [KNOWN_AGENT_KEYS.get(agentId), agent?.id === agentId ? agent.api_key : undefined];
-    return [...new Set(keys.filter((k) => !!k))];
-}
-/**
- * The credentials file holds a single agent slot, so recording agent B (create_agent,
- * set_agent_credentials) drops agent A's key. Remember every identified agent key seen
- * this session, so rotating A later still finds the scope its pending bet keys live under.
- */
-const KNOWN_AGENT_KEYS = new Map();
-function rememberAgentKey(agentId, apiKey) {
-    if (agentId !== undefined && apiKey)
-        KNOWN_AGENT_KEYS.set(agentId, apiKey);
-}
-/**
- * A startup key (env var, or a saved agent entry without an id) never passes through
- * create_agent / set_agent_credentials, so identify it before it caches a generated bet
- * key: an operator rotating that agent later must find the scope the key lives under.
- * Checked once per key; best effort, since a bet must not fail because whoami did.
- */
-const IDENTIFIED_KEYS = new Set();
-async function rememberClientIfAgent(c) {
-    const apiKey = c.getApiKey();
-    if (IDENTIFIED_KEYS.has(apiKey))
-        return;
-    try {
-        const me = await c.whoami();
-        IDENTIFIED_KEYS.add(apiKey);
-        if (me.type === 'agent' && me.id)
-            rememberAgentKey(me.id, apiKey);
-    }
-    catch {
-        // Retried on the next key-less bet.
-    }
-}
-function retainSavedAgentKey() {
-    const agent = (0, credentials_js_1.loadCredentials)()?.agent;
-    rememberAgentKey(agent?.id, agent?.api_key);
-}
-function betFingerprint(scope, bet) {
-    return JSON.stringify([scope, bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
-}
-/**
- * Drop the cached key once a bet is confirmed placed, so a later identical bet is a
- * new bet, not a replay. Runs for explicit keys too: the uncertain_outcome reply hands
- * the generated key back and asks the caller to retry with it, and that retry must
- * still clear the entry. Only evicts when the cached key IS the one that just
- * succeeded, so an unrelated caller-supplied key cannot drop another bet's key.
- * The odds_changed retry reuses the key but moves expected_odds_pct/line_version,
- * so the entry is filed under the ORIGINAL quote's fingerprint: after the direct
- * lookup misses, find it by key, or the stale entry would replay this bet for a
- * later key-less call that happens to match the original arguments. That search
- * stays inside the caller's own scope, so reusing a key under a second credential
- * cannot retire the first agent's entry and let its bet be placed twice.
- */
-function forgetIdempotencyKeyForBet(scope, bet, usedKey) {
-    const fingerprint = betFingerprint(scope, bet);
-    if (GENERATED_BET_KEYS.get(fingerprint)?.key === usedKey) {
-        GENERATED_BET_KEYS.delete(fingerprint);
-        return;
-    }
-    for (const [cached, entry] of GENERATED_BET_KEYS) {
-        if (entry.scope === scope && entry.key === usedKey) {
-            GENERATED_BET_KEYS.delete(cached);
-            return;
-        }
-    }
-}
-function idempotencyKeyForBet(scope, bet) {
-    const now = Date.now();
-    for (const [k, v] of GENERATED_BET_KEYS)
-        if (now - v.at > GENERATED_BET_KEY_TTL_MS)
-            GENERATED_BET_KEYS.delete(k);
-    const fingerprint = betFingerprint(scope, bet);
-    const hit = GENERATED_BET_KEYS.get(fingerprint);
-    if (hit)
-        return hit.key;
-    const key = (0, node_crypto_1.randomUUID)();
-    GENERATED_BET_KEYS.set(fingerprint, { key, scope, bet, at: now });
-    return key;
 }
 const PredictionMyBetsSchema = zod_1.z.object({
     status: zod_1.z.enum(['active', 'won', 'lost', 'refunded']).optional().describe('Filter by bet status'),
@@ -1171,7 +1041,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'prediction_place_bet',
-            description: 'Prediction markets: back yes or no on a market with sats from your agent balance. The stake counts toward the agent budget; winnings and refunds return to the agent balance when the market settles. Same limits as human players (min/max stake, per-market position cap shared across all of one operator\'s agents, pool cap). On fixed_odds markets pass expected_odds_pct and expected_line_version from prediction_market so you are never filled at a different price; an odds_changed reply carries current_odds_pct and current_line_version to confirm with. Retries with the same idempotency_key return the same bet. REQUIRES AGENT KEY with balance (fund_agent first).',
+            description: 'Prediction markets: back yes or no on a market with sats from your agent balance. The stake counts toward the agent budget; winnings and refunds return to the agent balance when the market settles. Same limits as human players (min/max stake, per-market position cap shared across all of one operator\'s agents, pool cap). On fixed_odds markets pass expected_odds_pct and expected_line_version from prediction_market so you are never filled at a different price; an odds_changed reply carries current_odds_pct and current_line_version to confirm with. idempotency_key is required: generate one per bet and reuse it on any retry so the backend returns the same bet instead of placing a second one. REQUIRES AGENT KEY with balance (fund_agent first).',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -1180,9 +1050,9 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
                     amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the agent balance' },
                     expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: the offered pct you saw for your side' },
                     expected_line_version: { type: 'integer', minimum: 0, description: 'fixed_odds markets: the line_version you saw' },
-                    idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Unique per bet; reuse on retry. Generated if omitted' },
+                    idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying the same bet' },
                 },
-                required: ['market_id', 'position', 'amount_sats'],
+                required: ['market_id', 'position', 'amount_sats', 'idempotency_key'],
             },
         },
         {
@@ -1443,8 +1313,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'create_agent': {
                 const parsed = CreateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
-                retainSavedAgentKey();
-                rememberAgentKey(result.agentId, result.agentApiKey);
                 const agentSavedTo = (0, credentials_js_1.saveAgentKey)(result.agentApiKey, { id: result.agentId, name: result.name }, false);
                 return {
                     content: [
@@ -1539,9 +1407,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const parsed = SetAgentCredentialsSchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 session.keySource = 'file';
-                retainSavedAgentKey();
-                // Identify the supplied key too, so a later operator rotation of this agent by
-                // agent_id can still find the scope its pending bet keys live under.
+                // Best-effort identification so the saved entry carries the agent id.
                 let suppliedAgentId;
                 try {
                     const me = await session.requireClient().whoami();
@@ -1551,7 +1417,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 catch {
                     // Best effort: switching credentials must not fail because whoami did.
                 }
-                rememberAgentKey(suppliedAgentId, parsed.api_key);
                 const agSavedTo = (0, credentials_js_1.saveAgentKey)(parsed.api_key, { id: suppliedAgentId }, true);
                 return {
                     content: [
@@ -1569,8 +1434,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'whoami': {
                 WhoamiSchema.parse(args ?? {});
                 const result = await session.requireClient().whoami();
-                if (result.type === 'agent' && result.id)
-                    rememberAgentKey(result.id, session.requireClient().getApiKey());
                 const response = {
                     success: true,
                     type: result.type,
@@ -1773,23 +1636,6 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const result = await rotatingClient.rotateApiKey(parsed.agent_id);
                 // Auto-switch to the new key
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(result.apiKey));
-                // Cached bet keys must follow the rotated identity to the new credential, or a
-                // key-less retry mints a second key for a bet that may already have landed.
-                // Self-rotation keeps the same identity, so that is the key in hand. Rotating an
-                // AGENT's key from an operator switches identity: migrate the agent's OWN old
-                // scope (only when the saved credentials identify it), never the operator's.
-                const rotatedFromKeys = parsed.agent_id ? rotatedAgentPreviousKeys(parsed.agent_id) : previousKey ? [previousKey] : [];
-                if (result.apiKey)
-                    for (const fromKey of rotatedFromKeys)
-                        rescopeGeneratedBetKeys(betScope(fromKey), betScope(result.apiKey));
-                if (parsed.agent_id)
-                    rememberAgentKey(parsed.agent_id, result.apiKey);
-                // A self-rotating agent keeps its identity: track its replacement key, or a later
-                // operator rotation of it by id could not find the scope its bet keys moved to.
-                else if (previousKey)
-                    for (const [id, key] of KNOWN_AGENT_KEYS)
-                        if (key === previousKey)
-                            rememberAgentKey(id, result.apiKey);
                 session.keySource = 'file';
                 // Carry the stored id, name and recovery code forward only if the key on file is the one
                 // that was just rotated (an env-var account must not inherit another operator's file entry).
@@ -2251,14 +2097,13 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'prediction_place_bet': {
                 const parsed = PredictionPlaceBetSchema.parse(args ?? {});
-                const betClient = session.requireClient();
-                const scope = betScope(betClient.getApiKey());
-                if (!parsed.idempotency_key)
-                    await rememberClientIfAgent(betClient);
-                const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(scope, parsed);
+                // The caller owns the idempotency key (required by schema and by the backend).
+                // No key is ever generated here: a server-side cache of generated keys cannot
+                // survive restarts, credential switches or key rotation, and every such gap
+                // is a path to a duplicate real-money bet.
+                const idempotencyKey = parsed.idempotency_key;
                 try {
-                    const result = await betClient.predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
-                    forgetIdempotencyKeyForBet(scope, parsed, idempotencyKey);
+                    const result = await session.requireClient().predictionPlaceBet(parsed);
                     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
                 }
                 catch (e) {
@@ -2276,7 +2121,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                             error: 'uncertain_outcome',
                             message: e instanceof Error ? e.message : String(e),
                             idempotency_key: idempotencyKey,
-                            next: 'The bet may or may not have been placed. Retry prediction_place_bet with the SAME arguments and this idempotency_key: that settles it either way, replaying the bet if it landed. Do NOT change the stake or side, which would create a new bet. Checking prediction_my_bets is not a substitute for the retry: only the keyed retry retires this key, and skipping it can make a later identical bet replay this one.',
+                            next: 'The bet may or may not have been placed. Retry prediction_place_bet with the SAME arguments and the SAME idempotency_key: the backend replays the bet if it landed and places it if it did not. Do NOT change the stake or side or the key, which would create a new bet.',
                         };
                         return { content: [{ type: 'text', text: JSON.stringify(uncertain, null, 2) }] };
                     }
