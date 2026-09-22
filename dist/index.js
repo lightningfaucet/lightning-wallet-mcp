@@ -383,11 +383,23 @@ function betFingerprint(scope, bet) {
  * the generated key back and asks the caller to retry with it, and that retry must
  * still clear the entry. Only evicts when the cached key IS the one that just
  * succeeded, so an unrelated caller-supplied key cannot drop another bet's key.
+ * The odds_changed retry reuses the key but moves expected_odds_pct/line_version,
+ * so the entry is filed under the ORIGINAL quote's fingerprint: after the direct
+ * lookup misses, find it by key, or the stale entry would replay this bet for a
+ * later key-less call that happens to match the original arguments.
  */
 function forgetIdempotencyKeyForBet(scope, bet, usedKey) {
     const fingerprint = betFingerprint(scope, bet);
-    if (GENERATED_BET_KEYS.get(fingerprint)?.key === usedKey)
+    if (GENERATED_BET_KEYS.get(fingerprint)?.key === usedKey) {
         GENERATED_BET_KEYS.delete(fingerprint);
+        return;
+    }
+    for (const [cached, entry] of GENERATED_BET_KEYS) {
+        if (entry.key === usedKey) {
+            GENERATED_BET_KEYS.delete(cached);
+            return;
+        }
+    }
 }
 function idempotencyKeyForBet(scope, bet) {
     const now = Date.now();
