@@ -1784,6 +1784,12 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                         rescopeGeneratedBetKeys(betScope(fromKey), betScope(result.apiKey));
                 if (parsed.agent_id)
                     rememberAgentKey(parsed.agent_id, result.apiKey);
+                // A self-rotating agent keeps its identity: track its replacement key, or a later
+                // operator rotation of it by id could not find the scope its bet keys moved to.
+                else if (previousKey)
+                    for (const [id, key] of KNOWN_AGENT_KEYS)
+                        if (key === previousKey)
+                            rememberAgentKey(id, result.apiKey);
                 session.keySource = 'file';
                 // Carry the stored id, name and recovery code forward only if the key on file is the one
                 // that was just rotated (an env-var account must not inherit another operator's file entry).
