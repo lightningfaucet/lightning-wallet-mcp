@@ -418,6 +418,27 @@ function rememberAgentKey(agentId, apiKey) {
     if (agentId !== undefined && apiKey)
         KNOWN_AGENT_KEYS.set(agentId, apiKey);
 }
+/**
+ * A startup key (env var, or a saved agent entry without an id) never passes through
+ * create_agent / set_agent_credentials, so identify it before it caches a generated bet
+ * key: an operator rotating that agent later must find the scope the key lives under.
+ * Checked once per key; best effort, since a bet must not fail because whoami did.
+ */
+const IDENTIFIED_KEYS = new Set();
+async function rememberClientIfAgent(c) {
+    const apiKey = c.getApiKey();
+    if (IDENTIFIED_KEYS.has(apiKey))
+        return;
+    try {
+        const me = await c.whoami();
+        IDENTIFIED_KEYS.add(apiKey);
+        if (me.type === 'agent' && me.id)
+            rememberAgentKey(me.id, apiKey);
+    }
+    catch {
+        // Retried on the next key-less bet.
+    }
+}
 function retainSavedAgentKey() {
     const agent = (0, credentials_js_1.loadCredentials)()?.agent;
     rememberAgentKey(agent?.id, agent?.api_key);
@@ -1548,6 +1569,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'whoami': {
                 WhoamiSchema.parse(args ?? {});
                 const result = await session.requireClient().whoami();
+                if (result.type === 'agent' && result.id)
+                    rememberAgentKey(result.id, session.requireClient().getApiKey());
                 const response = {
                     success: true,
                     type: result.type,
@@ -2224,6 +2247,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const parsed = PredictionPlaceBetSchema.parse(args ?? {});
                 const betClient = session.requireClient();
                 const scope = betScope(betClient.getApiKey());
+                if (!parsed.idempotency_key)
+                    await rememberClientIfAgent(betClient);
                 const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(scope, parsed);
                 try {
                     const result = await betClient.predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
