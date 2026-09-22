@@ -429,7 +429,7 @@ function predictionNextHint(error: string): string {
  * gets a fresh one. Entries expire after 15 minutes, and are dropped once a bet
  * is confirmed so a deliberate second identical bet is placed, not replayed.
  */
-const GENERATED_BET_KEYS = new Map<string, { key: string; at: number }>();
+const GENERATED_BET_KEYS = new Map<string, { key: string; scope: string; at: number }>();
 const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
 type BetFingerprintFields = { market_id: number; position: string; amount_sats: number; expected_odds_pct?: number; expected_line_version?: number };
 /**
@@ -452,7 +452,9 @@ function betFingerprint(scope: string, bet: BetFingerprintFields): string {
  * The odds_changed retry reuses the key but moves expected_odds_pct/line_version,
  * so the entry is filed under the ORIGINAL quote's fingerprint: after the direct
  * lookup misses, find it by key, or the stale entry would replay this bet for a
- * later key-less call that happens to match the original arguments.
+ * later key-less call that happens to match the original arguments. That search
+ * stays inside the caller's own scope, so reusing a key under a second credential
+ * cannot retire the first agent's entry and let its bet be placed twice.
  */
 function forgetIdempotencyKeyForBet(scope: string, bet: BetFingerprintFields, usedKey: string): void {
   const fingerprint = betFingerprint(scope, bet);
@@ -461,7 +463,7 @@ function forgetIdempotencyKeyForBet(scope: string, bet: BetFingerprintFields, us
     return;
   }
   for (const [cached, entry] of GENERATED_BET_KEYS) {
-    if (entry.key === usedKey) {
+    if (entry.scope === scope && entry.key === usedKey) {
       GENERATED_BET_KEYS.delete(cached);
       return;
     }
@@ -474,7 +476,7 @@ function idempotencyKeyForBet(scope: string, bet: BetFingerprintFields): string 
   const hit = GENERATED_BET_KEYS.get(fingerprint);
   if (hit) return hit.key;
   const key = randomUUID();
-  GENERATED_BET_KEYS.set(fingerprint, { key, at: now });
+  GENERATED_BET_KEYS.set(fingerprint, { key, scope, at: now });
   return key;
 }
 const PredictionMyBetsSchema = z.object({

@@ -386,7 +386,9 @@ function betFingerprint(scope, bet) {
  * The odds_changed retry reuses the key but moves expected_odds_pct/line_version,
  * so the entry is filed under the ORIGINAL quote's fingerprint: after the direct
  * lookup misses, find it by key, or the stale entry would replay this bet for a
- * later key-less call that happens to match the original arguments.
+ * later key-less call that happens to match the original arguments. That search
+ * stays inside the caller's own scope, so reusing a key under a second credential
+ * cannot retire the first agent's entry and let its bet be placed twice.
  */
 function forgetIdempotencyKeyForBet(scope, bet, usedKey) {
     const fingerprint = betFingerprint(scope, bet);
@@ -395,7 +397,7 @@ function forgetIdempotencyKeyForBet(scope, bet, usedKey) {
         return;
     }
     for (const [cached, entry] of GENERATED_BET_KEYS) {
-        if (entry.key === usedKey) {
+        if (entry.scope === scope && entry.key === usedKey) {
             GENERATED_BET_KEYS.delete(cached);
             return;
         }
@@ -411,7 +413,7 @@ function idempotencyKeyForBet(scope, bet) {
     if (hit)
         return hit.key;
     const key = (0, node_crypto_1.randomUUID)();
-    GENERATED_BET_KEYS.set(fingerprint, { key, at: now });
+    GENERATED_BET_KEYS.set(fingerprint, { key, scope, at: now });
     return key;
 }
 const PredictionMyBetsSchema = zod_1.z.object({
