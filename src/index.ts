@@ -429,7 +429,7 @@ function predictionNextHint(error: string): string {
  * gets a fresh one. Entries expire after 15 minutes, and are dropped once a bet
  * is confirmed so a deliberate second identical bet is placed, not replayed.
  */
-const GENERATED_BET_KEYS = new Map<string, { key: string; scope: string; at: number }>();
+const GENERATED_BET_KEYS = new Map<string, { key: string; scope: string; bet: BetFingerprintFields; at: number }>();
 const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
 type BetFingerprintFields = { market_id: number; position: string; amount_sats: number; expected_odds_pct?: number; expected_line_version?: number };
 /**
@@ -437,8 +437,24 @@ type BetFingerprintFields = { market_id: number; position: string; amount_sats: 
  * can switch agents mid-session, and two agents submitting the same fields are two
  * different bets: neither may inherit, or retire, the other's generated key.
  */
-function betScope(client: LightningFaucetClient): string {
-  return createHash('sha256').update(client.getApiKey()).digest('hex').slice(0, 16);
+function betScope(apiKey: string): string {
+  return createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+}
+/**
+ * Carry one credential's cached keys over to its replacement. Called only when the
+ * SAME identity rotates its own key: the agent is unchanged, so a key-less retry of
+ * an in-flight bet must still land on the original idempotency key instead of
+ * generating a second one and duplicating a bet that may already have been placed.
+ * Never call this for an operator rotating an AGENT's key — that switches identity,
+ * and the agent would inherit the operator's bets.
+ */
+function rescopeGeneratedBetKeys(fromScope: string, toScope: string): void {
+  if (fromScope === toScope) return;
+  for (const [fingerprint, entry] of [...GENERATED_BET_KEYS]) {
+    if (entry.scope !== fromScope) continue;
+    GENERATED_BET_KEYS.delete(fingerprint);
+    GENERATED_BET_KEYS.set(betFingerprint(toScope, entry.bet), { ...entry, scope: toScope });
+  }
 }
 function betFingerprint(scope: string, bet: BetFingerprintFields): string {
   return JSON.stringify([scope, bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
@@ -476,7 +492,7 @@ function idempotencyKeyForBet(scope: string, bet: BetFingerprintFields): string 
   const hit = GENERATED_BET_KEYS.get(fingerprint);
   if (hit) return hit.key;
   const key = randomUUID();
-  GENERATED_BET_KEYS.set(fingerprint, { key, scope, at: now });
+  GENERATED_BET_KEYS.set(fingerprint, { key, scope, bet, at: now });
   return key;
 }
 const PredictionMyBetsSchema = z.object({
@@ -1786,6 +1802,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await rotatingClient.rotateApiKey(parsed.agent_id);
         // Auto-switch to the new key
         session.setClient(new LightningFaucetClient(result.apiKey));
+        // Self-rotation keeps the same identity, so cached bet keys must follow the new
+        // credential. Rotating an AGENT's key from an operator switches identity: leave
+        // the operator's entries behind so the agent cannot replay them.
+        if (!parsed.agent_id && result.apiKey) rescopeGeneratedBetKeys(betScope(previousKey), betScope(result.apiKey));
         session.keySource = 'file';
         // Carry the stored id, name and recovery code forward only if the key on file is the one
         // that was just rotated (an env-var account must not inherit another operator's file entry).
@@ -2301,7 +2321,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'prediction_place_bet': {
         const parsed = PredictionPlaceBetSchema.parse(args ?? {});
         const betClient = session.requireClient();
-        const scope = betScope(betClient);
+        const scope = betScope(betClient.getApiKey());
         const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(scope, parsed);
         try {
           const result = await betClient.predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
