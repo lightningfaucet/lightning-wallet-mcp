@@ -443,7 +443,8 @@ WEBHOOKS
                     "events":["invoice_paid","balance_changed"]}'
 
   Events: invoice_paid, payment_completed, payment_failed,
-          withdrawal_completed, balance_changed, balance_low, budget_warning
+          withdrawal_completed, balance_changed, balance_low, budget_warning,
+          bet_placed, bet_settled
 
   Full docs: https://lightningfaucet.com/ai-agents/docs#webhooks
 

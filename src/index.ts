@@ -22,7 +22,8 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice, getPublicArena } from './lightning-faucet.js';
+import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice, getPublicArena, getPublicAction } from './lightning-faucet.js';
+import { randomUUID } from 'node:crypto';
 import {
   loadCredentials,
   activeStoredKey,
@@ -211,7 +212,7 @@ const WhoamiSchema = z.object({});
 
 const RegisterWebhookSchema = z.object({
   url: z.string().url().describe('HTTPS webhook URL to receive events'),
-  events: z.array(z.enum(['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'test']))
+  events: z.array(z.enum(['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'bet_placed', 'bet_settled', 'test']))
     .default(['invoice_paid']).describe('Event types to subscribe to'),
 });
 
@@ -366,6 +367,65 @@ const ArenaLeaderboardSchema = z.object({
 });
 const ArenaSetClientSeedSchema = z.object({
   client_seed: z.string().min(1).max(64).regex(/^[A-Za-z0-9]+$/).describe('Your own client seed, 1-64 alphanumeric chars'),
+});
+
+// Prediction markets (agents bet for their operators from the agent wallet)
+const PredictionMarketsSchema = z.object({
+  status: z.enum(['open', 'upcoming', 'closed', 'resolved', 'cancelled', 'all']).optional().describe('Market status filter. Default open'),
+  market_type: z.enum(['sports', 'btc_price']).optional().describe('sports (fixed-odds books and series) or btc_price (parimutuel)'),
+  category: z.string().min(1).max(40).optional().describe('League or category key, e.g. nfl, nba, nhl, mlb, ncaaf, mma, epl, ucl, tennis, btc_daily'),
+  limit: z.number().int().min(1).max(100).optional().describe('Rows to return (default 50)'),
+  offset: z.number().int().min(0).optional().describe('Pagination offset'),
+});
+const PredictionMarketSchema = z.object({
+  market_id: z.number().int().positive().describe('Market id from prediction_markets'),
+});
+const PredictionPlaceBetSchema = z.object({
+  market_id: z.number().int().positive().describe('Market id from prediction_markets'),
+  position: z.enum(['yes', 'no']).describe('Side to back'),
+  amount_sats: z.number().int().positive().describe('Stake in sats, taken from the agent balance'),
+  expected_odds_pct: z.number().gt(0).lt(100).optional().describe('fixed_odds markets: the offered_yes_pct or offered_no_pct you saw for your side. The bet is refused with odds_changed if the price moved'),
+  expected_line_version: z.number().int().min(0).optional().describe('fixed_odds markets: the line_version you saw. Refused with odds_changed if the proposition was re-lined'),
+  idempotency_key: z.string().min(1).max(128).optional().describe('Unique per bet; reuse it on retry to get the same bet back instead of a second one. Generated for you if omitted'),
+});
+/** Backend refusals that carry a structured reply the model can act on (not thrown). */
+const PREDICTION_REFUSALS = new Set([
+  'odds_changed', 'position_cap_exceeded', 'budget_exceeded', 'insufficient_balance', 'bet_in_progress',
+  'house_exposure_cap', 'odds_unavailable', 'market_closed', 'pool_limit_reached', 'min_bet_not_met',
+  'max_bet_exceeded', 'feature_disabled', 'busy', 'rate_limited',
+]);
+function predictionNextHint(error: string): string {
+  switch (error) {
+    case 'odds_changed':
+      return 'The price or line moved. To accept it, call prediction_place_bet again with the SAME idempotency_key, expected_odds_pct = current_odds_pct and expected_line_version = current_line_version.';
+    case 'position_cap_exceeded':
+      return 'Stake at most remaining_capacity_sats on this market, or pick another market. The cap is per operator across all of its agents.';
+    case 'budget_exceeded':
+      return 'Ask your operator to raise the budget (set_budget) or stake at most budget_remaining_sats.';
+    case 'insufficient_balance':
+      return 'Fund the agent first (fund_agent from the operator, or create_invoice and pay it), then retry with the same idempotency_key.';
+    case 'bet_in_progress':
+    case 'busy':
+      return 'Wait a few seconds and retry with the same idempotency_key.';
+    case 'rate_limited':
+      return 'You placed too many bets in the last minute. Wait retry_after seconds and retry with the same idempotency_key.';
+    case 'house_exposure_cap':
+      return 'The house cannot take more on this side right now. Try a smaller stake or the other side.';
+    case 'odds_unavailable':
+      return 'Betting is paused while the line updates. Re-read prediction_market shortly.';
+    case 'market_closed':
+      return 'This market no longer takes bets. List open markets with prediction_markets.';
+    case 'feature_disabled':
+      return 'Agent betting is not enabled on the server yet.';
+    default:
+      return 'Read the message field, adjust the stake or market, and retry with a fresh idempotency_key.';
+  }
+}
+const PredictionMyBetsSchema = z.object({
+  status: z.enum(['active', 'won', 'lost', 'refunded']).optional().describe('Filter by bet status'),
+  agent_id: z.number().int().positive().optional().describe('Operator key only: limit to one agent'),
+  limit: z.number().int().min(1).max(100).optional().describe('Rows to return (default 50)'),
+  offset: z.number().int().min(0).optional().describe('Pagination offset'),
 });
 
 // List available tools
@@ -589,7 +649,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           url: { type: 'string', description: 'HTTPS webhook URL to receive events' },
           events: {
             type: 'array',
-            items: { type: 'string', enum: ['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'test'] },
+            items: { type: 'string', enum: ['invoice_paid', 'payment_completed', 'payment_failed', 'withdrawal_completed', 'balance_changed', 'balance_low', 'budget_warning', 'bet_placed', 'bet_settled', 'test'] },
             default: ['invoice_paid'],
             description: 'Event types to subscribe to',
           },
@@ -1019,6 +1079,65 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'arena_reveal_seed',
       description: 'Agent Arena: reveal the current server seed (so every past roll can be verified against its committed hash) and rotate to a fresh committed seed. Do this after an event, not mid-entry. REQUIRES AGENT KEY.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'prediction_markets',
+      description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; echo offered_yes_pct/offered_no_pct and line_version back when betting) or parimutuel (payout depends on the final pool). Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['open', 'upcoming', 'closed', 'resolved', 'cancelled', 'all'], description: 'Default open' },
+          market_type: { type: 'string', enum: ['sports', 'btc_price'] },
+          category: { type: 'string', description: 'League or category key, e.g. nfl, nba, nhl, mlb, ncaaf, mma, epl, ucl, tennis, btc_daily' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
+          offset: { type: 'integer', minimum: 0 },
+        },
+      },
+    },
+    {
+      name: 'prediction_market',
+      description: 'Prediction markets: one market in full (odds, pools, caps, close and resolve times, resolution source, recent bets). With an agent key it adds my_position. Read this right before prediction_place_bet on a fixed_odds market to get the current offered_*_pct and line_version.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
+        },
+        required: ['market_id'],
+      },
+    },
+    {
+      name: 'prediction_place_bet',
+      description: 'Prediction markets: back yes or no on a market with sats from your agent balance. The stake counts toward the agent budget; winnings and refunds return to the agent balance when the market settles. Same limits as human players (min/max stake, per-market position cap shared across all of one operator\'s agents, pool cap). On fixed_odds markets pass expected_odds_pct and expected_line_version from prediction_market so you are never filled at a different price; an odds_changed reply carries current_odds_pct and current_line_version to confirm with. Retries with the same idempotency_key return the same bet. REQUIRES AGENT KEY with balance (fund_agent first).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
+          position: { type: 'string', enum: ['yes', 'no'], description: 'Side to back' },
+          amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the agent balance' },
+          expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: the offered pct you saw for your side' },
+          expected_line_version: { type: 'integer', minimum: 0, description: 'fixed_odds markets: the line_version you saw' },
+          idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Unique per bet; reuse on retry. Generated if omitted' },
+        },
+        required: ['market_id', 'position', 'amount_sats'],
+      },
+    },
+    {
+      name: 'prediction_my_bets',
+      description: 'Prediction markets: your bets, newest first, with market title, status (active|won|lost|refunded), payout and profit. With an operator key it lists bets across all of your agents (optional agent_id filter). Any winnings sitting on the settlement ledger are swept to the agent balance first. REQUIRES AGENT OR OPERATOR KEY.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['active', 'won', 'lost', 'refunded'] },
+          agent_id: { type: 'integer', minimum: 1, description: 'Operator key only: limit to one agent' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
+          offset: { type: 'integer', minimum: 0 },
+        },
+      },
+    },
+    {
+      name: 'prediction_positions',
+      description: 'Prediction markets: open positions (stake per side per market, potential payout, close time) and total at stake. With an operator key it aggregates across all of your agents and adds a 7-day settled result. REQUIRES AGENT OR OPERATOR KEY.',
       inputSchema: { type: 'object', properties: {} },
     },
   ],
@@ -2102,6 +2221,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'arena_reveal_seed': {
         const result = await session.requireClient().arenaRevealSeed();
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      // ─── Prediction markets ───────────────────────────────────────────
+      case 'prediction_markets': {
+        const parsed = PredictionMarketsSchema.parse(args ?? {});
+        const filters = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== undefined));
+        const c = session.getClient();
+        const result = c ? await c.predictionMarkets(filters) : await getPublicAction('prediction_markets', filters);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prediction_market': {
+        const parsed = PredictionMarketSchema.parse(args ?? {});
+        const c = session.getClient();
+        const result = c ? await c.predictionMarket(parsed.market_id) : await getPublicAction('prediction_market', { market_id: parsed.market_id });
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prediction_place_bet': {
+        const parsed = PredictionPlaceBetSchema.parse(args ?? {});
+        const idempotencyKey = parsed.idempotency_key ?? randomUUID();
+        try {
+          const result = await session.requireClient().predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        } catch (e) {
+          // A refusal is information the model acts on (re-price, size down, fund),
+          // not a failure: hand the backend's structured reply through unchanged.
+          if (e instanceof ApiError && PREDICTION_REFUSALS.has(String(e.response.error ?? ''))) {
+            const refusal = { ...e.response, idempotency_key: idempotencyKey, next: predictionNextHint(String(e.response.error)) };
+            return { content: [{ type: 'text', text: JSON.stringify(refusal, null, 2) }] };
+          }
+          throw e;
+        }
+      }
+
+      case 'prediction_my_bets': {
+        const parsed = PredictionMyBetsSchema.parse(args ?? {});
+        const filters = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== undefined));
+        const result = await session.requireClient().predictionMyBets(filters);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'prediction_positions': {
+        const result = await session.requireClient().predictionPositions();
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       }
 

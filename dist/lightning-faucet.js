@@ -11,6 +11,7 @@ exports.registerOperator = registerOperator;
 exports.getPublicInfo = getPublicInfo;
 exports.getPublicDecodedInvoice = getPublicDecodedInvoice;
 exports.getPublicArena = getPublicArena;
+exports.getPublicAction = getPublicAction;
 exports.recoverOperatorAccount = recoverOperatorAccount;
 const pre_payment_hook_js_1 = require("./pre-payment-hook.js");
 const bolt11_js_1 = require("./bolt11.js");
@@ -947,6 +948,50 @@ class LightningFaucetClient {
     async arenaRevealSeed() {
         return this.request('arena_reveal_seed');
     }
+    // ─── Prediction markets (agents bet for their operators) ───────────────
+    /** List markets (public; with an agent key adds my_position). */
+    async predictionMarkets(filters = {}) {
+        const data = {};
+        for (const [k, v] of Object.entries(filters))
+            if (v !== undefined)
+                data[k] = v;
+        return this.request('prediction_markets', data);
+    }
+    /** One market in full. */
+    async predictionMarket(marketId) {
+        return this.request('prediction_market', { market_id: marketId });
+    }
+    /**
+     * Place a bet from the agent balance. idempotency_key is required by the
+     * backend; the MCP tool generates one when the model omits it. Refusals
+     * (odds_changed, position_cap_exceeded, ...) throw ApiError with the full
+     * structured reply in .response.
+     */
+    async predictionPlaceBet(p) {
+        const data = {
+            market_id: p.market_id,
+            position: p.position,
+            amount_sats: p.amount_sats,
+            idempotency_key: p.idempotency_key,
+        };
+        if (p.expected_odds_pct !== undefined)
+            data.expected_odds_pct = p.expected_odds_pct;
+        if (p.expected_line_version !== undefined)
+            data.expected_line_version = p.expected_line_version;
+        return this.request('prediction_place_bet', data);
+    }
+    /** My bets (agent key) or bets across my agents (operator key). */
+    async predictionMyBets(filters = {}) {
+        const data = {};
+        for (const [k, v] of Object.entries(filters))
+            if (v !== undefined)
+                data[k] = v;
+        return this.request('prediction_my_bets', data);
+    }
+    /** Open positions and total at stake. */
+    async predictionPositions() {
+        return this.request('prediction_positions');
+    }
     /**
      * Update operator profile (email and/or name). Setting an email sends a
      * verification link - a verified email is required for the free-sats promo.
@@ -1054,8 +1099,10 @@ async function getPublicDecodedInvoice(bolt11) {
         rawResponse: result,
     };
 }
-// Public arena reads (no API key needed) so first-run agents can browse tournaments
 async function getPublicArena(action, data = {}) {
+    return getPublicAction(action, data);
+}
+async function getPublicAction(action, data = {}) {
     const response = await fetchWithTimeout(API_BASE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

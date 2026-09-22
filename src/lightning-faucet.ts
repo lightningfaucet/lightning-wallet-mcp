@@ -1618,6 +1618,57 @@ export class LightningFaucetClient {
     return this.request<ApiResponse & Record<string, unknown>>('arena_reveal_seed');
   }
 
+  // ─── Prediction markets (agents bet for their operators) ───────────────
+
+  /** List markets (public; with an agent key adds my_position). */
+  async predictionMarkets(filters: { status?: string; market_type?: string; category?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined) data[k] = v;
+    return this.request<ApiResponse & Record<string, unknown>>('prediction_markets', data);
+  }
+
+  /** One market in full. */
+  async predictionMarket(marketId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('prediction_market', { market_id: marketId });
+  }
+
+  /**
+   * Place a bet from the agent balance. idempotency_key is required by the
+   * backend; the MCP tool generates one when the model omits it. Refusals
+   * (odds_changed, position_cap_exceeded, ...) throw ApiError with the full
+   * structured reply in .response.
+   */
+  async predictionPlaceBet(p: {
+    market_id: number;
+    position: 'yes' | 'no';
+    amount_sats: number;
+    idempotency_key: string;
+    expected_odds_pct?: number;
+    expected_line_version?: number;
+  }): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = {
+      market_id: p.market_id,
+      position: p.position,
+      amount_sats: p.amount_sats,
+      idempotency_key: p.idempotency_key,
+    };
+    if (p.expected_odds_pct !== undefined) data.expected_odds_pct = p.expected_odds_pct;
+    if (p.expected_line_version !== undefined) data.expected_line_version = p.expected_line_version;
+    return this.request<ApiResponse & Record<string, unknown>>('prediction_place_bet', data);
+  }
+
+  /** My bets (agent key) or bets across my agents (operator key). */
+  async predictionMyBets(filters: { status?: string; agent_id?: number; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined) data[k] = v;
+    return this.request<ApiResponse & Record<string, unknown>>('prediction_my_bets', data);
+  }
+
+  /** Open positions and total at stake. */
+  async predictionPositions(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('prediction_positions');
+  }
+
   /**
    * Update operator profile (email and/or name). Setting an email sends a
    * verification link - a verified email is required for the free-sats promo.
@@ -1781,9 +1832,18 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
   };
 }
 
-// Public arena reads (no API key needed) so first-run agents can browse tournaments
+// Public reads (no API key needed) so first-run agents can browse tournaments and markets
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market';
+
 export async function getPublicArena(
   action: 'arena_list' | 'arena_leaderboard',
+  data: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  return getPublicAction(action, data);
+}
+
+export async function getPublicAction(
+  action: PublicReadAction,
   data: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
   const response = await fetchWithTimeout(API_BASE_URL, {
