@@ -23,7 +23,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice, getPublicArena, getPublicAction } from './lightning-faucet.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import {
   loadCredentials,
   activeStoredKey,
@@ -432,8 +432,16 @@ function predictionNextHint(error: string): string {
 const GENERATED_BET_KEYS = new Map<string, { key: string; at: number }>();
 const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
 type BetFingerprintFields = { market_id: number; position: string; amount_sats: number; expected_odds_pct?: number; expected_line_version?: number };
-function betFingerprint(bet: BetFingerprintFields): string {
-  return JSON.stringify([bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
+/**
+ * The cache is scoped to the credential that places the bet. set_agent_credentials
+ * can switch agents mid-session, and two agents submitting the same fields are two
+ * different bets: neither may inherit, or retire, the other's generated key.
+ */
+function betScope(client: LightningFaucetClient): string {
+  return createHash('sha256').update(client.getApiKey()).digest('hex').slice(0, 16);
+}
+function betFingerprint(scope: string, bet: BetFingerprintFields): string {
+  return JSON.stringify([scope, bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
 }
 /**
  * Drop the cached key once a bet is confirmed placed, so a later identical bet is a
@@ -442,14 +450,14 @@ function betFingerprint(bet: BetFingerprintFields): string {
  * still clear the entry. Only evicts when the cached key IS the one that just
  * succeeded, so an unrelated caller-supplied key cannot drop another bet's key.
  */
-function forgetIdempotencyKeyForBet(bet: BetFingerprintFields, usedKey: string): void {
-  const fingerprint = betFingerprint(bet);
+function forgetIdempotencyKeyForBet(scope: string, bet: BetFingerprintFields, usedKey: string): void {
+  const fingerprint = betFingerprint(scope, bet);
   if (GENERATED_BET_KEYS.get(fingerprint)?.key === usedKey) GENERATED_BET_KEYS.delete(fingerprint);
 }
-function idempotencyKeyForBet(bet: BetFingerprintFields): string {
+function idempotencyKeyForBet(scope: string, bet: BetFingerprintFields): string {
   const now = Date.now();
   for (const [k, v] of GENERATED_BET_KEYS) if (now - v.at > GENERATED_BET_KEY_TTL_MS) GENERATED_BET_KEYS.delete(k);
-  const fingerprint = betFingerprint(bet);
+  const fingerprint = betFingerprint(scope, bet);
   const hit = GENERATED_BET_KEYS.get(fingerprint);
   if (hit) return hit.key;
   const key = randomUUID();
@@ -2277,10 +2285,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'prediction_place_bet': {
         const parsed = PredictionPlaceBetSchema.parse(args ?? {});
-        const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(parsed);
+        const betClient = session.requireClient();
+        const scope = betScope(betClient);
+        const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(scope, parsed);
         try {
-          const result = await session.requireClient().predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
-          forgetIdempotencyKeyForBet(parsed, idempotencyKey);
+          const result = await betClient.predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
+          forgetIdempotencyKeyForBet(scope, parsed, idempotencyKey);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         } catch (e) {
           // A refusal is information the model acts on (re-price, size down, fund),
