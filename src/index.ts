@@ -435,9 +435,16 @@ type BetFingerprintFields = { market_id: number; position: string; amount_sats: 
 function betFingerprint(bet: BetFingerprintFields): string {
   return JSON.stringify([bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
 }
-/** Drop the cached key once a bet is confirmed placed, so a later identical bet is a new bet, not a replay. */
-function forgetIdempotencyKeyForBet(bet: BetFingerprintFields): void {
-  GENERATED_BET_KEYS.delete(betFingerprint(bet));
+/**
+ * Drop the cached key once a bet is confirmed placed, so a later identical bet is a
+ * new bet, not a replay. Runs for explicit keys too: the uncertain_outcome reply hands
+ * the generated key back and asks the caller to retry with it, and that retry must
+ * still clear the entry. Only evicts when the cached key IS the one that just
+ * succeeded, so an unrelated caller-supplied key cannot drop another bet's key.
+ */
+function forgetIdempotencyKeyForBet(bet: BetFingerprintFields, usedKey: string): void {
+  const fingerprint = betFingerprint(bet);
+  if (GENERATED_BET_KEYS.get(fingerprint)?.key === usedKey) GENERATED_BET_KEYS.delete(fingerprint);
 }
 function idempotencyKeyForBet(bet: BetFingerprintFields): string {
   const now = Date.now();
@@ -2273,7 +2280,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(parsed);
         try {
           const result = await session.requireClient().predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
-          if (!parsed.idempotency_key) forgetIdempotencyKeyForBet(parsed);
+          forgetIdempotencyKeyForBet(parsed, idempotencyKey);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         } catch (e) {
           // A refusal is information the model acts on (re-price, size down, fund),
