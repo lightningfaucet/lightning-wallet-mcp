@@ -426,14 +426,23 @@ function predictionNextHint(error: string): string {
  * retries the same tool call after a timeout must land on the SAME key, or the
  * backend sees a second bet. Keyed by the bet's own fields (market, side, stake,
  * expected price/line) so an identical retry reuses the key; a different bet
- * gets a fresh one. Entries expire after 15 minutes.
+ * gets a fresh one. Entries expire after 15 minutes, and are dropped once a bet
+ * is confirmed so a deliberate second identical bet is placed, not replayed.
  */
 const GENERATED_BET_KEYS = new Map<string, { key: string; at: number }>();
 const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
-function idempotencyKeyForBet(bet: { market_id: number; position: string; amount_sats: number; expected_odds_pct?: number; expected_line_version?: number }): string {
+type BetFingerprintFields = { market_id: number; position: string; amount_sats: number; expected_odds_pct?: number; expected_line_version?: number };
+function betFingerprint(bet: BetFingerprintFields): string {
+  return JSON.stringify([bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
+}
+/** Drop the cached key once a bet is confirmed placed, so a later identical bet is a new bet, not a replay. */
+function forgetIdempotencyKeyForBet(bet: BetFingerprintFields): void {
+  GENERATED_BET_KEYS.delete(betFingerprint(bet));
+}
+function idempotencyKeyForBet(bet: BetFingerprintFields): string {
   const now = Date.now();
   for (const [k, v] of GENERATED_BET_KEYS) if (now - v.at > GENERATED_BET_KEY_TTL_MS) GENERATED_BET_KEYS.delete(k);
-  const fingerprint = JSON.stringify([bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
+  const fingerprint = betFingerprint(bet);
   const hit = GENERATED_BET_KEYS.get(fingerprint);
   if (hit) return hit.key;
   const key = randomUUID();
@@ -2264,6 +2273,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(parsed);
         try {
           const result = await session.requireClient().predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
+          if (!parsed.idempotency_key) forgetIdempotencyKeyForBet(parsed);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         } catch (e) {
           // A refusal is information the model acts on (re-price, size down, fund),
