@@ -393,17 +393,20 @@ function rescopeGeneratedBetKeys(fromScope, toScope) {
     }
 }
 /**
- * The key an agent was using before `rotate_api_key({agent_id})` replaced it, but only
- * when the credentials file positively identifies the saved agent key as that agent's.
+ * The keys an agent was using before `rotate_api_key({agent_id})` replaced it, but only
+ * when this session or the credentials file positively identifies it as that agent's.
  * Rotating an agent from the operator switches the session's identity, so without this
  * the agent's own pending bet keys would be stranded under its old scope and a key-less
  * retry would mint a second key for a bet that may already have landed. An unidentified
- * (or different) agent entry returns undefined rather than risk migrating another
+ * (or different) agent entry contributes nothing rather than risk migrating another
  * identity's keys.
  */
-function rotatedAgentPreviousKey(agentId) {
+function rotatedAgentPreviousKeys(agentId) {
     const agent = (0, credentials_js_1.loadCredentials)()?.agent;
-    return agent?.id === agentId ? agent.api_key : KNOWN_AGENT_KEYS.get(agentId);
+    // The file can be stale (persistence off, or a failed write) while the session holds a
+    // newer key for the same agent: rescope from every key known to be this agent's.
+    const keys = [KNOWN_AGENT_KEYS.get(agentId), agent?.id === agentId ? agent.api_key : undefined];
+    return [...new Set(keys.filter((k) => !!k))];
 }
 /**
  * The credentials file holds a single agent slot, so recording agent B (create_agent,
@@ -1752,9 +1755,10 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 // Self-rotation keeps the same identity, so that is the key in hand. Rotating an
                 // AGENT's key from an operator switches identity: migrate the agent's OWN old
                 // scope (only when the saved credentials identify it), never the operator's.
-                const rotatedFromKey = parsed.agent_id ? rotatedAgentPreviousKey(parsed.agent_id) : previousKey;
-                if (rotatedFromKey && result.apiKey)
-                    rescopeGeneratedBetKeys(betScope(rotatedFromKey), betScope(result.apiKey));
+                const rotatedFromKeys = parsed.agent_id ? rotatedAgentPreviousKeys(parsed.agent_id) : previousKey ? [previousKey] : [];
+                if (result.apiKey)
+                    for (const fromKey of rotatedFromKeys)
+                        rescopeGeneratedBetKeys(betScope(fromKey), betScope(result.apiKey));
                 if (parsed.agent_id)
                     rememberAgentKey(parsed.agent_id, result.apiKey);
                 session.keySource = 'file';
