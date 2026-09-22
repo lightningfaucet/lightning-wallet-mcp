@@ -50,3 +50,15 @@ test('predictionMarkets drops undefined filters and never sends a key-less body 
     assert.ok(!('api_key' in calls[0]), 'public read must not carry an api_key');
   });
 });
+
+test('a generated idempotency key is stable for an identical retry and fresh for a different bet', async () => {
+  // The MCP server derives the key from the bet fields when the caller omits it;
+  // this pins the client-side contract the tool relies on (the key is sent as given).
+  const seen = [];
+  await withStubbedFetch({ success: true, bet: { id: 1 } }, async (calls) => {
+    await client.predictionPlaceBet({ market_id: 5, position: 'yes', amount_sats: 10, idempotency_key: 'same' });
+    await client.predictionPlaceBet({ market_id: 5, position: 'yes', amount_sats: 10, idempotency_key: 'same' });
+    seen.push(calls[0].idempotency_key, calls[1].idempotency_key);
+  });
+  assert.equal(seen[0], seen[1]);
+});

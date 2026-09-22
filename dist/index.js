@@ -356,6 +356,28 @@ function predictionNextHint(error) {
             return 'Read the message field, adjust the stake or market, and retry with a fresh idempotency_key.';
     }
 }
+/**
+ * Idempotency keys for prediction_place_bet calls that omitted one. A model that
+ * retries the same tool call after a timeout must land on the SAME key, or the
+ * backend sees a second bet. Keyed by the bet's own fields (market, side, stake,
+ * expected price/line) so an identical retry reuses the key; a different bet
+ * gets a fresh one. Entries expire after 15 minutes.
+ */
+const GENERATED_BET_KEYS = new Map();
+const GENERATED_BET_KEY_TTL_MS = 15 * 60 * 1000;
+function idempotencyKeyForBet(bet) {
+    const now = Date.now();
+    for (const [k, v] of GENERATED_BET_KEYS)
+        if (now - v.at > GENERATED_BET_KEY_TTL_MS)
+            GENERATED_BET_KEYS.delete(k);
+    const fingerprint = JSON.stringify([bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
+    const hit = GENERATED_BET_KEYS.get(fingerprint);
+    if (hit)
+        return hit.key;
+    const key = (0, node_crypto_1.randomUUID)();
+    GENERATED_BET_KEYS.set(fingerprint, { key, at: now });
+    return key;
+}
 const PredictionMyBetsSchema = zod_1.z.object({
     status: zod_1.z.enum(['active', 'won', 'lost', 'refunded']).optional().describe('Filter by bet status'),
     agent_id: zod_1.z.number().int().positive().optional().describe('Operator key only: limit to one agent'),
@@ -2088,7 +2110,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             }
             case 'prediction_place_bet': {
                 const parsed = PredictionPlaceBetSchema.parse(args ?? {});
-                const idempotencyKey = parsed.idempotency_key ?? (0, node_crypto_1.randomUUID)();
+                const idempotencyKey = parsed.idempotency_key ?? idempotencyKeyForBet(parsed);
                 try {
                     const result = await session.requireClient().predictionPlaceBet({ ...parsed, idempotency_key: idempotencyKey });
                     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
@@ -2099,6 +2121,18 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                     if (e instanceof lightning_faucet_js_1.ApiError && PREDICTION_REFUSALS.has(String(e.response.error ?? ''))) {
                         const refusal = { ...e.response, idempotency_key: idempotencyKey, next: predictionNextHint(String(e.response.error)) };
                         return { content: [{ type: 'text', text: JSON.stringify(refusal, null, 2) }] };
+                    }
+                    // Unknown outcome (timeout, network, 5xx): the bet may have been placed.
+                    // Surface the key so the retry is a replay, never a second bet.
+                    if (!(e instanceof lightning_faucet_js_1.ApiError)) {
+                        const uncertain = {
+                            success: false,
+                            error: 'uncertain_outcome',
+                            message: e instanceof Error ? e.message : String(e),
+                            idempotency_key: idempotencyKey,
+                            next: 'The bet may or may not have been placed. Retry prediction_place_bet with the SAME arguments and this idempotency_key (or call prediction_my_bets). Do NOT change the stake or side, which would create a new bet.',
+                        };
+                        return { content: [{ type: 'text', text: JSON.stringify(uncertain, null, 2) }] };
                     }
                     throw e;
                 }
