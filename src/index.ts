@@ -445,8 +445,8 @@ function betScope(apiKey: string): string {
  * SAME identity rotates its own key: the agent is unchanged, so a key-less retry of
  * an in-flight bet must still land on the original idempotency key instead of
  * generating a second one and duplicating a bet that may already have been placed.
- * Never call this for an operator rotating an AGENT's key — that switches identity,
- * and the agent would inherit the operator's bets.
+ * Never call this with the operator's own key as `fromScope` when an AGENT's key was
+ * rotated — that switches identity, and the agent would inherit the operator's bets.
  */
 function rescopeGeneratedBetKeys(fromScope: string, toScope: string): void {
   if (fromScope === toScope) return;
@@ -455,6 +455,19 @@ function rescopeGeneratedBetKeys(fromScope: string, toScope: string): void {
     GENERATED_BET_KEYS.delete(fingerprint);
     GENERATED_BET_KEYS.set(betFingerprint(toScope, entry.bet), { ...entry, scope: toScope });
   }
+}
+/**
+ * The key an agent was using before `rotate_api_key({agent_id})` replaced it, but only
+ * when the credentials file positively identifies the saved agent key as that agent's.
+ * Rotating an agent from the operator switches the session's identity, so without this
+ * the agent's own pending bet keys would be stranded under its old scope and a key-less
+ * retry would mint a second key for a bet that may already have landed. An unidentified
+ * (or different) agent entry returns undefined rather than risk migrating another
+ * identity's keys.
+ */
+function rotatedAgentPreviousKey(agentId: number): string | undefined {
+  const agent = loadCredentials()?.agent;
+  return agent?.id === agentId ? agent.api_key : undefined;
 }
 function betFingerprint(scope: string, bet: BetFingerprintFields): string {
   return JSON.stringify([scope, bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
@@ -1802,10 +1815,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await rotatingClient.rotateApiKey(parsed.agent_id);
         // Auto-switch to the new key
         session.setClient(new LightningFaucetClient(result.apiKey));
-        // Self-rotation keeps the same identity, so cached bet keys must follow the new
-        // credential. Rotating an AGENT's key from an operator switches identity: leave
-        // the operator's entries behind so the agent cannot replay them.
-        if (!parsed.agent_id && result.apiKey) rescopeGeneratedBetKeys(betScope(previousKey), betScope(result.apiKey));
+        // Cached bet keys must follow the rotated identity to the new credential, or a
+        // key-less retry mints a second key for a bet that may already have landed.
+        // Self-rotation keeps the same identity, so that is the key in hand. Rotating an
+        // AGENT's key from an operator switches identity: migrate the agent's OWN old
+        // scope (only when the saved credentials identify it), never the operator's.
+        const rotatedFromKey = parsed.agent_id ? rotatedAgentPreviousKey(parsed.agent_id) : previousKey;
+        if (rotatedFromKey && result.apiKey) rescopeGeneratedBetKeys(betScope(rotatedFromKey), betScope(result.apiKey));
         session.keySource = 'file';
         // Carry the stored id, name and recovery code forward only if the key on file is the one
         // that was just rotated (an env-var account must not inherit another operator's file entry).

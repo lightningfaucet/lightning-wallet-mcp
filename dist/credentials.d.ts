@@ -36,7 +36,13 @@ export declare function saveOperatorKey(apiKey: string, extra?: {
 }, opts?: {
     rotatedFrom?: string;
 }): string | null;
-/** Save an agent key. Activates it only when `activate` is true (set_agent_credentials); create_agent just records it. */
+/**
+ * Save an agent key. Activates it only when `activate` is true (set_agent_credentials);
+ * create_agent just records it. Metadata already on file is kept when the key is unchanged
+ * (set_agent_credentials passes none), since the recorded id is what later lets rotate_api_key
+ * recognise the saved key as the rotated agent's. A different key is a different agent and
+ * starts clean.
+ */
 export declare function saveAgentKey(apiKey: string, extra?: {
     id?: number;
     name?: string;

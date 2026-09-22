@@ -112,10 +112,17 @@ export function saveOperatorKey(
   return writeCredentials(creds);
 }
 
-/** Save an agent key. Activates it only when `activate` is true (set_agent_credentials); create_agent just records it. */
+/**
+ * Save an agent key. Activates it only when `activate` is true (set_agent_credentials);
+ * create_agent just records it. Metadata already on file is kept when the key is unchanged
+ * (set_agent_credentials passes none), since the recorded id is what later lets rotate_api_key
+ * recognise the saved key as the rotated agent's. A different key is a different agent and
+ * starts clean.
+ */
 export function saveAgentKey(apiKey: string, extra: { id?: number; name?: string } = {}, activate = false): string | null {
   const creds = base();
-  creds.agent = { api_key: apiKey, id: extra.id, name: extra.name, saved_at: new Date().toISOString() };
+  const prev = creds.agent?.api_key === apiKey ? creds.agent : undefined;
+  creds.agent = { api_key: apiKey, id: extra.id ?? prev?.id, name: extra.name ?? prev?.name, saved_at: new Date().toISOString() };
   if (activate) creds.active = 'agent';
   return writeCredentials(creds);
 }
