@@ -1602,7 +1602,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         session.setClient(new LightningFaucetClient(parsed.api_key));
         session.keySource = 'file';
         retainSavedAgentKey();
-        const agSavedTo = saveAgentKey(parsed.api_key, {}, true);
+        // Identify the supplied key too, so a later operator rotation of this agent by
+        // agent_id can still find the scope its pending bet keys live under.
+        let suppliedAgentId: number | undefined;
+        try {
+          const me = await session.requireClient().whoami();
+          if (me.type === 'agent' && me.id) suppliedAgentId = me.id;
+        } catch {
+          // Best effort: switching credentials must not fail because whoami did.
+        }
+        rememberAgentKey(suppliedAgentId, parsed.api_key);
+        const agSavedTo = saveAgentKey(parsed.api_key, { id: suppliedAgentId }, true);
         return {
           content: [
             {
