@@ -2320,7 +2320,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               error: 'uncertain_outcome',
               message: e instanceof Error ? e.message : String(e),
               idempotency_key: idempotencyKey,
-              next: 'The bet may or may not have been placed. Retry prediction_place_bet with the SAME arguments and this idempotency_key (or call prediction_my_bets). Do NOT change the stake or side, which would create a new bet.',
+              next: 'The bet may or may not have been placed. Retry prediction_place_bet with the SAME arguments and this idempotency_key: that settles it either way, replaying the bet if it landed. Do NOT change the stake or side, which would create a new bet. Checking prediction_my_bets is not a substitute for the retry: only the keyed retry retires this key, and skipping it can make a later identical bet replay this one.',
             };
             return { content: [{ type: 'text', text: JSON.stringify(uncertain, null, 2) }] };
           }
