@@ -19,7 +19,8 @@ recover recover_account recover_operator register regenerate_agent_key regenerat
 register_webhook remove_lightning_address rotate_agent_key rotate_api_key rotate_key security_log
 security_status set_budget set_lightning_address set_nostr_identity test_webhook transactions
 transfer_between_agents transfer_to_agent unlock_agent update_agent update_operator verify_operator_email
-whoami withdraw withdraw_from_agent withdraw_lightning withdraw_link promo_status`.split(/\s+/));
+whoami withdraw withdraw_from_agent withdraw_lightning withdraw_link promo_status
+prediction_markets prediction_market prediction_place_bet prediction_my_bets prediction_positions`.split(/\s+/));
 
 function withStubbedFetch(reply, fn) {
   const calls = [];
@@ -60,6 +61,12 @@ const cases = [
   ['getRateLimits', [], 'get_rate_limits', []],
   ['updateOperator', [{ email: 'x@y.z' }], 'update_operator', ['email']],
   ['claimPromo', [undefined], 'claim_promo', []],
+  ['predictionMarkets', [{ status: 'open', category: 'nhl' }], 'prediction_markets', ['status', 'category']],
+  ['predictionMarket', [4321], 'prediction_market', ['market_id']],
+  ['predictionPlaceBet', [{ market_id: 4321, position: 'yes', amount_sats: 10, idempotency_key: 'k1' }], 'prediction_place_bet', ['market_id', 'position', 'amount_sats', 'idempotency_key']],
+  ['predictionPlaceBet', [{ market_id: 4321, position: 'no', amount_sats: 10, idempotency_key: 'k2', expected_odds_pct: 48.5, expected_line_version: 3 }], 'prediction_place_bet', ['expected_odds_pct', 'expected_line_version']],
+  ['predictionMyBets', [{ status: 'won', agent_id: 7 }], 'prediction_my_bets', ['status', 'agent_id']],
+  ['predictionPositions', [], 'prediction_positions', []],
 ];
 
 for (const [method, args, action, requiredKeys] of cases) {

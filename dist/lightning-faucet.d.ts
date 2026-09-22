@@ -554,6 +554,39 @@ export declare class LightningFaucetClient {
     arenaFairness(): Promise<Record<string, unknown>>;
     arenaSetClientSeed(clientSeed: string): Promise<Record<string, unknown>>;
     arenaRevealSeed(): Promise<Record<string, unknown>>;
+    /** List markets (public; with an agent key adds my_position). */
+    predictionMarkets(filters?: {
+        status?: string;
+        market_type?: string;
+        category?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<Record<string, unknown>>;
+    /** One market in full. */
+    predictionMarket(marketId: number): Promise<Record<string, unknown>>;
+    /**
+     * Place a bet from the agent balance. idempotency_key is required by the
+     * backend; the MCP tool generates one when the model omits it. Refusals
+     * (odds_changed, position_cap_exceeded, ...) throw ApiError with the full
+     * structured reply in .response.
+     */
+    predictionPlaceBet(p: {
+        market_id: number;
+        position: 'yes' | 'no';
+        amount_sats: number;
+        idempotency_key: string;
+        expected_odds_pct?: number;
+        expected_line_version?: number;
+    }): Promise<Record<string, unknown>>;
+    /** My bets (agent key) or bets across my agents (operator key). */
+    predictionMyBets(filters?: {
+        status?: string;
+        agent_id?: number;
+        limit?: number;
+        offset?: number;
+    }): Promise<Record<string, unknown>>;
+    /** Open positions and total at stake. */
+    predictionPositions(): Promise<Record<string, unknown>>;
     /**
      * Update operator profile (email and/or name). Setting an email sends a
      * verification link - a verified email is required for the free-sats promo.
@@ -600,7 +633,9 @@ export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt?: string;
     rawResponse: ApiResponse;
 }>;
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market';
 export declare function getPublicArena(action: 'arena_list' | 'arena_leaderboard', data?: Record<string, unknown>): Promise<Record<string, unknown>>;
+export declare function getPublicAction(action: PublicReadAction, data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 /**
  * Account recovery is unauthenticated (the recovery code IS the credential), so it lives
  * outside the client class: callers must not need an API key to construct anything.
