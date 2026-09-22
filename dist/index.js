@@ -403,7 +403,21 @@ function rescopeGeneratedBetKeys(fromScope, toScope) {
  */
 function rotatedAgentPreviousKey(agentId) {
     const agent = (0, credentials_js_1.loadCredentials)()?.agent;
-    return agent?.id === agentId ? agent.api_key : undefined;
+    return agent?.id === agentId ? agent.api_key : KNOWN_AGENT_KEYS.get(agentId);
+}
+/**
+ * The credentials file holds a single agent slot, so recording agent B (create_agent,
+ * set_agent_credentials) drops agent A's key. Remember every identified agent key seen
+ * this session, so rotating A later still finds the scope its pending bet keys live under.
+ */
+const KNOWN_AGENT_KEYS = new Map();
+function rememberAgentKey(agentId, apiKey) {
+    if (agentId !== undefined && apiKey)
+        KNOWN_AGENT_KEYS.set(agentId, apiKey);
+}
+function retainSavedAgentKey() {
+    const agent = (0, credentials_js_1.loadCredentials)()?.agent;
+    rememberAgentKey(agent?.id, agent?.api_key);
 }
 function betFingerprint(scope, bet) {
     return JSON.stringify([scope, bet.market_id, bet.position, bet.amount_sats, bet.expected_odds_pct ?? null, bet.expected_line_version ?? null]);
@@ -1405,6 +1419,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             case 'create_agent': {
                 const parsed = CreateAgentSchema.parse(args ?? {});
                 const result = await session.requireClient().createAgent(parsed.name, parsed.description, parsed.budget_limit_sats);
+                retainSavedAgentKey();
+                rememberAgentKey(result.agentId, result.agentApiKey);
                 const agentSavedTo = (0, credentials_js_1.saveAgentKey)(result.agentApiKey, { id: result.agentId, name: result.name }, false);
                 return {
                     content: [
@@ -1499,6 +1515,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const parsed = SetAgentCredentialsSchema.parse(args ?? {});
                 session.setClient(new lightning_faucet_js_1.LightningFaucetClient(parsed.api_key));
                 session.keySource = 'file';
+                retainSavedAgentKey();
                 const agSavedTo = (0, credentials_js_1.saveAgentKey)(parsed.api_key, {}, true);
                 return {
                     content: [
@@ -1726,6 +1743,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                 const rotatedFromKey = parsed.agent_id ? rotatedAgentPreviousKey(parsed.agent_id) : previousKey;
                 if (rotatedFromKey && result.apiKey)
                     rescopeGeneratedBetKeys(betScope(rotatedFromKey), betScope(result.apiKey));
+                if (parsed.agent_id)
+                    rememberAgentKey(parsed.agent_id, result.apiKey);
                 session.keySource = 'file';
                 // Carry the stored id, name and recovery code forward only if the key on file is the one
                 // that was just rotated (an env-var account must not inherit another operator's file entry).
