@@ -877,7 +877,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'nostr_zap',
-      description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set Paid as a Lightning-address payment: platform fee 1% of the amount, rounded down, no minimum, reported as platform_fee_sats.',,
+      description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set. Paid as a Lightning-address payment: platform fee 1% of the amount, rounded down, no minimum, reported as platform_fee_sats.',
       inputSchema: {
         type: 'object',
         properties: {
