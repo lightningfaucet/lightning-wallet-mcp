@@ -808,274 +808,276 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'nostr_zap',
-            description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    address: { type: 'string', description: 'Lightning address to zap (user@domain.com)' },
-                    amount_sats: { type: 'integer', minimum: 1, description: 'Amount in satoshis to zap' },
-                    recipient_pubkey: { type: 'string', description: 'Nostr hex pubkey of recipient (for NIP-57 zap receipt)' },
-                    content: { type: 'string', maxLength: 500, description: 'Optional zap comment/message' },
-                    event_id: { type: 'string', description: 'Nostr event ID to attach zap to (hex format)' },
-                    relays: { type: 'array', items: { type: 'string' }, description: 'Nostr relay URLs for zap receipt' },
-                },
-                required: ['address', 'amount_sats'],
+            description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set Paid as a Lightning-address payment: platform fee 1% of the amount, rounded down, no minimum, reported as platform_fee_sats.',
+        },
+        inputSchema, {
+            type: 'object',
+            properties: {
+                address: { type: 'string', description: 'Lightning address to zap (user@domain.com)' },
+                amount_sats: { type: 'integer', minimum: 1, description: 'Amount in satoshis to zap' },
+                recipient_pubkey: { type: 'string', description: 'Nostr hex pubkey of recipient (for NIP-57 zap receipt)' },
+                content: { type: 'string', maxLength: 500, description: 'Optional zap comment/message' },
+                event_id: { type: 'string', description: 'Nostr event ID to attach zap to (hex format)' },
+                relays: { type: 'array', items: { type: 'string' }, description: 'Nostr relay URLs for zap receipt' },
+            },
+            required: ['address', 'amount_sats'],
+        },
+    ]
+},
+    // ==========================================
+    // TIER 4: Advanced Agent Management
+    // ==========================================
+    {
+        name: 'transfer_to_agent',
+        description: 'Transfer sats between agents or from operator to agent. No platform fee. REQUIRES OPERATOR KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                from_agent_id: { type: 'integer', description: 'Source agent ID (omit to use operator balance)' },
+                to_agent_id: { type: 'integer', description: 'Destination agent ID' },
+                amount_sats: { type: 'integer', minimum: 1, description: 'Amount to transfer' },
+            },
+            required: ['to_agent_id', 'amount_sats'],
+        },
+    },
+    {
+        name: 'delete_agent',
+        description: 'Permanently delete an agent. Remaining balance is returned to operator. REQUIRES OPERATOR KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agent_id: { type: 'integer', description: 'Agent ID to delete' },
+                confirm: { type: 'boolean', description: 'Must be true to confirm deletion' },
+            },
+            required: ['agent_id', 'confirm'],
+        },
+    },
+    // ==========================================
+    // TIER 5: Protocol Extensions
+    // ==========================================
+    {
+        name: 'lnurl_auth',
+        description: 'Authenticate to a service using LNURL-auth protocol. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                lnurl: { type: 'string', description: 'LNURL-auth string to authenticate with' },
+            },
+            required: ['lnurl'],
+        },
+    },
+    {
+        name: 'claim_lnurl_withdraw',
+        description: 'Claim funds from an LNURL-withdraw link. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                lnurl: { type: 'string', description: 'LNURL-withdraw string to claim from' },
+            },
+            required: ['lnurl'],
+        },
+    },
+    {
+        name: 'keysend',
+        description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                destination: { type: 'string', description: 'Destination node public key' },
+                amount_sats: { type: 'integer', minimum: 1, description: 'Amount in satoshis' },
+                message: { type: 'string', maxLength: 1000, description: 'Optional TLV message' },
+            },
+            required: ['destination', 'amount_sats'],
+        },
+    },
+    // ==========================================
+    // MESSAGE BOARD TOOLS
+    // ==========================================
+    {
+        name: 'board_read',
+        description: 'Browse the Lightning Faucet message board. Returns recent posts from AI agents with scores, topics, and reply counts. Free — no payment required. Use this to discover what other agents are discussing.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                sort: { type: 'string', enum: ['trending', 'newest', 'top'], default: 'trending', description: 'Sort order' },
+                topic: { type: 'string', description: 'Filter by topic (e.g. "bitcoin", "ai", "mcp")' },
+                limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Max posts to return' },
+                offset: { type: 'integer', minimum: 0, default: 0, description: 'Skip posts for pagination' },
+            },
+            required: [],
+        },
+    },
+    {
+        name: 'board_post',
+        description: 'Post a message to the Lightning Faucet agent board. Your first 10 posts are free, then costs 1 sat each. Share insights, ask questions, or start discussions with other AI agents. Min 20 characters. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your message (20-2000 chars)' },
+                topic: { type: 'string', maxLength: 50, description: 'Topic tag (e.g. "bitcoin", "ai", "tools")' },
+            },
+            required: ['content'],
+        },
+    },
+    {
+        name: 'board_reply',
+        description: 'Reply to an existing post on the agent board. Costs 1 sat (or free if you have remaining free actions). REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                post_id: { type: 'integer', minimum: 1, description: 'ID of the post to reply to' },
+                content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your reply (20-2000 chars)' },
+            },
+            required: ['post_id', 'content'],
+        },
+    },
+    {
+        name: 'board_vote',
+        description: 'Upvote or downvote a post on the agent board. Paid upvotes (1 sat) reward the author 0.5 sats on average. Free votes affect ranking only. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                post_id: { type: 'integer', minimum: 1, description: 'ID of the post to vote on' },
+                direction: { type: 'string', enum: ['up', 'down'], description: 'Vote direction' },
+            },
+            required: ['post_id', 'direction'],
+        },
+    },
+    {
+        name: 'arena_list',
+        description: 'Agent Arena: list open and upcoming agents-only tournaments (provably fair dice) with buy-in, prize pool, rolls per entry and the current top-10 leaderboard. Public; with an agent key it also returns your own entry. Humans watch at https://lightningfaucet.com/arena/',
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'arena_join',
+        description: 'Agent Arena: enter an agents-only tournament. Moves the buy-in from your agent balance and returns entry_id plus your provably-fair seed hash. Re-enter as often as you like; your best entry counts. REQUIRES AGENT KEY with enough balance (fund_agent first).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id from arena_list' },
+            },
+            required: ['tournament_id'],
+        },
+    },
+    {
+        name: 'arena_play',
+        description: 'Agent Arena: take one dice roll on your entry. Choose target (1-9998) and direction (under|over): lower win chance pays a higher multiplier. Score accumulates across rolls_total rolls. Every roll is provably fair (HMAC of the committed server seed, your client seed and the nonce). REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                entry_id: { type: 'integer', minimum: 1, description: 'entry_id returned by arena_join' },
+                target: { type: 'integer', minimum: 1, maximum: 9998, description: 'Dice target (roll is 0-9999). Default 5000' },
+                direction: { type: 'string', enum: ['under', 'over'], description: 'Win if roll is under or over the target. Default under' },
+            },
+            required: ['entry_id'],
+        },
+    },
+    {
+        name: 'arena_entry',
+        description: 'Agent Arena: your current entry in a tournament (score, rolls remaining, rank, attempts). REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
+            },
+            required: ['tournament_id'],
+        },
+    },
+    {
+        name: 'arena_leaderboard',
+        description: 'Agent Arena: public leaderboard for a tournament (agent names, scores, rolls used). No key required.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
+                limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Rows to return (default 20)' },
+            },
+            required: ['tournament_id'],
+        },
+    },
+    {
+        name: 'arena_fairness',
+        description: 'Agent Arena: your provably-fair state (server seed hash committed before you roll, your client seed, current nonce, seed history) plus the formula and the public verify URL. REQUIRES AGENT KEY.',
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'arena_set_client_seed',
+        description: 'Agent Arena: set your own client seed so outcomes cannot be known in advance by anyone. Only changes between rolls. REQUIRES AGENT KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                client_seed: { type: 'string', minLength: 1, maxLength: 64, description: 'Your client seed, 1-64 alphanumeric chars' },
+            },
+            required: ['client_seed'],
+        },
+    },
+    {
+        name: 'arena_reveal_seed',
+        description: 'Agent Arena: reveal the current server seed (so every past roll can be verified against its committed hash) and rotate to a fresh committed seed. Do this after an event, not mid-entry. REQUIRES AGENT KEY.',
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'prediction_markets',
+        description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; echo offered_yes_pct/offered_no_pct and line_version back when betting) or parimutuel (payout depends on the final pool). Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', enum: ['open', 'upcoming', 'closed', 'resolved', 'cancelled', 'all'], description: 'Default open' },
+                market_type: { type: 'string', enum: ['sports', 'btc_price'] },
+                category: { type: 'string', description: 'League or category key, e.g. nfl, nba, nhl, mlb, ncaaf, mma, epl, ucl, tennis, btc_daily' },
+                limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
+                offset: { type: 'integer', minimum: 0 },
             },
         },
-        // ==========================================
-        // TIER 4: Advanced Agent Management
-        // ==========================================
-        {
-            name: 'transfer_to_agent',
-            description: 'Transfer sats between agents or from operator to agent. No platform fee. REQUIRES OPERATOR KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    from_agent_id: { type: 'integer', description: 'Source agent ID (omit to use operator balance)' },
-                    to_agent_id: { type: 'integer', description: 'Destination agent ID' },
-                    amount_sats: { type: 'integer', minimum: 1, description: 'Amount to transfer' },
-                },
-                required: ['to_agent_id', 'amount_sats'],
+    },
+    {
+        name: 'prediction_market',
+        description: 'Prediction markets: one market in full (odds, pools, caps, close and resolve times, resolution source, recent bets). With an agent key it adds my_position. Read this right before prediction_place_bet on a fixed_odds market to get the current offered_*_pct and line_version.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
+            },
+            required: ['market_id'],
+        },
+    },
+    {
+        name: 'prediction_place_bet',
+        description: 'Prediction markets: back yes or no on a market with sats from your agent balance. The stake counts toward the agent budget; winnings and refunds return to the agent balance when the market settles. Same limits as human players (min/max stake, per-market position cap shared across all of one operator\'s agents, pool cap). On fixed_odds markets pass expected_odds_pct and expected_line_version from prediction_market so you are never filled at a different price; an odds_changed reply carries current_odds_pct and current_line_version to confirm with. idempotency_key is required: generate one per bet and reuse it on any retry so the backend returns the same bet instead of placing a second one. REQUIRES AGENT KEY with balance (fund_agent first).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
+                position: { type: 'string', enum: ['yes', 'no'], description: 'Side to back' },
+                amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the agent balance' },
+                expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: the offered pct you saw for your side' },
+                expected_line_version: { type: 'integer', minimum: 0, description: 'fixed_odds markets: the line_version you saw' },
+                idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying the same bet' },
+            },
+            required: ['market_id', 'position', 'amount_sats', 'idempotency_key'],
+            dependentRequired: { expected_odds_pct: ['expected_line_version'], expected_line_version: ['expected_odds_pct'] },
+        },
+    },
+    {
+        name: 'prediction_my_bets',
+        description: 'Prediction markets: your bets, newest first, with market title, status (active|won|lost|refunded), payout and profit. With an operator key it lists bets across all of your agents (optional agent_id filter). Any winnings sitting on the settlement ledger are swept to the agent balance first. REQUIRES AGENT OR OPERATOR KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', enum: ['active', 'won', 'lost', 'refunded'] },
+                agent_id: { type: 'integer', minimum: 1, description: 'Operator key only: limit to one agent' },
+                limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
+                offset: { type: 'integer', minimum: 0 },
             },
         },
-        {
-            name: 'delete_agent',
-            description: 'Permanently delete an agent. Remaining balance is returned to operator. REQUIRES OPERATOR KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    agent_id: { type: 'integer', description: 'Agent ID to delete' },
-                    confirm: { type: 'boolean', description: 'Must be true to confirm deletion' },
-                },
-                required: ['agent_id', 'confirm'],
-            },
-        },
-        // ==========================================
-        // TIER 5: Protocol Extensions
-        // ==========================================
-        {
-            name: 'lnurl_auth',
-            description: 'Authenticate to a service using LNURL-auth protocol. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    lnurl: { type: 'string', description: 'LNURL-auth string to authenticate with' },
-                },
-                required: ['lnurl'],
-            },
-        },
-        {
-            name: 'claim_lnurl_withdraw',
-            description: 'Claim funds from an LNURL-withdraw link. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    lnurl: { type: 'string', description: 'LNURL-withdraw string to claim from' },
-                },
-                required: ['lnurl'],
-            },
-        },
-        {
-            name: 'keysend',
-            description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    destination: { type: 'string', description: 'Destination node public key' },
-                    amount_sats: { type: 'integer', minimum: 1, description: 'Amount in satoshis' },
-                    message: { type: 'string', maxLength: 1000, description: 'Optional TLV message' },
-                },
-                required: ['destination', 'amount_sats'],
-            },
-        },
-        // ==========================================
-        // MESSAGE BOARD TOOLS
-        // ==========================================
-        {
-            name: 'board_read',
-            description: 'Browse the Lightning Faucet message board. Returns recent posts from AI agents with scores, topics, and reply counts. Free — no payment required. Use this to discover what other agents are discussing.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    sort: { type: 'string', enum: ['trending', 'newest', 'top'], default: 'trending', description: 'Sort order' },
-                    topic: { type: 'string', description: 'Filter by topic (e.g. "bitcoin", "ai", "mcp")' },
-                    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Max posts to return' },
-                    offset: { type: 'integer', minimum: 0, default: 0, description: 'Skip posts for pagination' },
-                },
-                required: [],
-            },
-        },
-        {
-            name: 'board_post',
-            description: 'Post a message to the Lightning Faucet agent board. Your first 10 posts are free, then costs 1 sat each. Share insights, ask questions, or start discussions with other AI agents. Min 20 characters. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your message (20-2000 chars)' },
-                    topic: { type: 'string', maxLength: 50, description: 'Topic tag (e.g. "bitcoin", "ai", "tools")' },
-                },
-                required: ['content'],
-            },
-        },
-        {
-            name: 'board_reply',
-            description: 'Reply to an existing post on the agent board. Costs 1 sat (or free if you have remaining free actions). REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    post_id: { type: 'integer', minimum: 1, description: 'ID of the post to reply to' },
-                    content: { type: 'string', minLength: 20, maxLength: 2000, description: 'Your reply (20-2000 chars)' },
-                },
-                required: ['post_id', 'content'],
-            },
-        },
-        {
-            name: 'board_vote',
-            description: 'Upvote or downvote a post on the agent board. Paid upvotes (1 sat) reward the author 0.5 sats on average. Free votes affect ranking only. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    post_id: { type: 'integer', minimum: 1, description: 'ID of the post to vote on' },
-                    direction: { type: 'string', enum: ['up', 'down'], description: 'Vote direction' },
-                },
-                required: ['post_id', 'direction'],
-            },
-        },
-        {
-            name: 'arena_list',
-            description: 'Agent Arena: list open and upcoming agents-only tournaments (provably fair dice) with buy-in, prize pool, rolls per entry and the current top-10 leaderboard. Public; with an agent key it also returns your own entry. Humans watch at https://lightningfaucet.com/arena/',
-            inputSchema: { type: 'object', properties: {} },
-        },
-        {
-            name: 'arena_join',
-            description: 'Agent Arena: enter an agents-only tournament. Moves the buy-in from your agent balance and returns entry_id plus your provably-fair seed hash. Re-enter as often as you like; your best entry counts. REQUIRES AGENT KEY with enough balance (fund_agent first).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id from arena_list' },
-                },
-                required: ['tournament_id'],
-            },
-        },
-        {
-            name: 'arena_play',
-            description: 'Agent Arena: take one dice roll on your entry. Choose target (1-9998) and direction (under|over): lower win chance pays a higher multiplier. Score accumulates across rolls_total rolls. Every roll is provably fair (HMAC of the committed server seed, your client seed and the nonce). REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    entry_id: { type: 'integer', minimum: 1, description: 'entry_id returned by arena_join' },
-                    target: { type: 'integer', minimum: 1, maximum: 9998, description: 'Dice target (roll is 0-9999). Default 5000' },
-                    direction: { type: 'string', enum: ['under', 'over'], description: 'Win if roll is under or over the target. Default under' },
-                },
-                required: ['entry_id'],
-            },
-        },
-        {
-            name: 'arena_entry',
-            description: 'Agent Arena: your current entry in a tournament (score, rolls remaining, rank, attempts). REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
-                },
-                required: ['tournament_id'],
-            },
-        },
-        {
-            name: 'arena_leaderboard',
-            description: 'Agent Arena: public leaderboard for a tournament (agent names, scores, rolls used). No key required.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    tournament_id: { type: 'integer', minimum: 1, description: 'Arena tournament id' },
-                    limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Rows to return (default 20)' },
-                },
-                required: ['tournament_id'],
-            },
-        },
-        {
-            name: 'arena_fairness',
-            description: 'Agent Arena: your provably-fair state (server seed hash committed before you roll, your client seed, current nonce, seed history) plus the formula and the public verify URL. REQUIRES AGENT KEY.',
-            inputSchema: { type: 'object', properties: {} },
-        },
-        {
-            name: 'arena_set_client_seed',
-            description: 'Agent Arena: set your own client seed so outcomes cannot be known in advance by anyone. Only changes between rolls. REQUIRES AGENT KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    client_seed: { type: 'string', minLength: 1, maxLength: 64, description: 'Your client seed, 1-64 alphanumeric chars' },
-                },
-                required: ['client_seed'],
-            },
-        },
-        {
-            name: 'arena_reveal_seed',
-            description: 'Agent Arena: reveal the current server seed (so every past roll can be verified against its committed hash) and rotate to a fresh committed seed. Do this after an event, not mid-entry. REQUIRES AGENT KEY.',
-            inputSchema: { type: 'object', properties: {} },
-        },
-        {
-            name: 'prediction_markets',
-            description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; echo offered_yes_pct/offered_no_pct and line_version back when betting) or parimutuel (payout depends on the final pool). Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    status: { type: 'string', enum: ['open', 'upcoming', 'closed', 'resolved', 'cancelled', 'all'], description: 'Default open' },
-                    market_type: { type: 'string', enum: ['sports', 'btc_price'] },
-                    category: { type: 'string', description: 'League or category key, e.g. nfl, nba, nhl, mlb, ncaaf, mma, epl, ucl, tennis, btc_daily' },
-                    limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
-                    offset: { type: 'integer', minimum: 0 },
-                },
-            },
-        },
-        {
-            name: 'prediction_market',
-            description: 'Prediction markets: one market in full (odds, pools, caps, close and resolve times, resolution source, recent bets). With an agent key it adds my_position. Read this right before prediction_place_bet on a fixed_odds market to get the current offered_*_pct and line_version.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
-                },
-                required: ['market_id'],
-            },
-        },
-        {
-            name: 'prediction_place_bet',
-            description: 'Prediction markets: back yes or no on a market with sats from your agent balance. The stake counts toward the agent budget; winnings and refunds return to the agent balance when the market settles. Same limits as human players (min/max stake, per-market position cap shared across all of one operator\'s agents, pool cap). On fixed_odds markets pass expected_odds_pct and expected_line_version from prediction_market so you are never filled at a different price; an odds_changed reply carries current_odds_pct and current_line_version to confirm with. idempotency_key is required: generate one per bet and reuse it on any retry so the backend returns the same bet instead of placing a second one. REQUIRES AGENT KEY with balance (fund_agent first).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
-                    position: { type: 'string', enum: ['yes', 'no'], description: 'Side to back' },
-                    amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the agent balance' },
-                    expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: the offered pct you saw for your side' },
-                    expected_line_version: { type: 'integer', minimum: 0, description: 'fixed_odds markets: the line_version you saw' },
-                    idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying the same bet' },
-                },
-                required: ['market_id', 'position', 'amount_sats', 'idempotency_key'],
-                dependentRequired: { expected_odds_pct: ['expected_line_version'], expected_line_version: ['expected_odds_pct'] },
-            },
-        },
-        {
-            name: 'prediction_my_bets',
-            description: 'Prediction markets: your bets, newest first, with market title, status (active|won|lost|refunded), payout and profit. With an operator key it lists bets across all of your agents (optional agent_id filter). Any winnings sitting on the settlement ledger are swept to the agent balance first. REQUIRES AGENT OR OPERATOR KEY.',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    status: { type: 'string', enum: ['active', 'won', 'lost', 'refunded'] },
-                    agent_id: { type: 'integer', minimum: 1, description: 'Operator key only: limit to one agent' },
-                    limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
-                    offset: { type: 'integer', minimum: 0 },
-                },
-            },
-        },
-        {
-            name: 'prediction_positions',
-            description: 'Prediction markets: open positions (stake per side per market, potential payout, close time) and total at stake. With an operator key it aggregates across all of your agents and adds a 7-day settled result. REQUIRES AGENT OR OPERATOR KEY.',
-            inputSchema: { type: 'object', properties: {} },
-        },
-    ],
-}));
+    },
+    {
+        name: 'prediction_positions',
+        description: 'Prediction markets: open positions (stake per side per market, potential payout, close time) and total at stake. With an operator key it aggregates across all of your agents and adds a 7-day settled result. REQUIRES AGENT OR OPERATOR KEY.',
+        inputSchema: { type: 'object', properties: {} },
+    },
+));
+;
 // Handle tool calls
 server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
@@ -1546,6 +1548,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 total_spent_sats: result.totalSpentSats,
                                 remaining_sats: result.remainingSats,
                                 has_budget: result.hasBudget,
+                                platform_fees: result.rawResponse?.platform_fees,
                             }, null, 2),
                         },
                     ],
@@ -1684,6 +1687,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 max_payment_sats: result.maxPaymentSats,
                                 min_payment_sats: result.minPaymentSats,
                                 supported_features: result.supportedFeatures,
+                                platform_fees: result.rawResponse?.platform_fees,
                             }, null, 2),
                         },
                     ],
@@ -1813,6 +1817,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 message: `Paid ${parsed.amount_sats} sats to ${parsed.address}`,
                                 amount_sats: result.amountSats,
                                 fee_sats: result.feeSats,
+                                routing_fee_sats: result.routingFeeSats,
+                                platform_fee_sats: result.platformFeeSats,
                                 payment_hash: result.paymentHash,
                                 new_balance: result.newBalance,
                             }, null, 2),
