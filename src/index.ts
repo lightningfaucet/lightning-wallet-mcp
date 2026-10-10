@@ -444,7 +444,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'pay_l402_api',
-      description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. Platform fee on the API price: 1%, minimum 1 sat, reported as fee_sats. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key.',
+      description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. Platform fee on the API price: 1%, rounded down, no minimum, reported as fee in the response. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -469,7 +469,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'pay_invoice',
-      description: 'Pay a BOLT11 Lightning invoice. Platform fee: 1% of the amount, minimum 1 sat, reported as platform_fee_sats (call get_info for the current schedule). Returns the preimage as proof of payment. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key. If the response says pending:true the payment is still in flight: do NOT retry, check get_transactions instead.',
+      description: 'Pay a BOLT11 Lightning invoice. Platform fee: 1% of the amount, rounded down, no minimum (nothing under 100 sats), reported as platform_fee_sats; get_info returns the current schedule. Returns the preimage as proof of payment. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key. If the response says pending:true the payment is still in flight: do NOT retry, check get_transactions instead.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -842,7 +842,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'pay_lightning_address',
-      description: 'Pay to a Lightning address (user@domain.com format). Platform fee: 1% of the amount, minimum 1 sat, reported as platform_fee_sats. Works with an operator key (pays from the operator wallet) or an agent key.',
+      description: 'Pay to a Lightning address (user@domain.com format). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. Works with an operator key (pays from the operator wallet) or an agent key.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -946,7 +946,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'keysend',
-      description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). Platform fee: 1% of the amount, minimum 1 sat, reported as platform_fee_sats. REQUIRES AGENT KEY.',
+      description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. REQUIRES AGENT KEY.',
       inputSchema: {
         type: 'object',
         properties: {
