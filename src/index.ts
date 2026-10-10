@@ -1995,6 +1995,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   (result.zapType === 'nip57' ? ' (NIP-57 zap receipt created)' : ' (regular payment, recipient does not support NIP-57)'),
                 amount_sats: result.amountSats,
                 fee_sats: result.feeSats,
+                routing_fee_sats: result.routingFeeSats,
+                platform_fee_sats: result.platformFeeSats,
                 payment_hash: result.paymentHash,
                 new_balance: result.newBalance,
                 zap_type: result.zapType,
