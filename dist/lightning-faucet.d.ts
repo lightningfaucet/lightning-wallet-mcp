@@ -522,6 +522,8 @@ export declare class LightningFaucetClient {
     nostrZap(address: string, amountSats: number, recipientPubkey?: string, content?: string, eventId?: string, relays?: string[]): Promise<{
         amountSats: number;
         feeSats: number;
+        routingFeeSats: number;
+        platformFeeSats: number;
         paymentHash: string;
         newBalance: number;
         zapType: 'nip57' | 'fallback';

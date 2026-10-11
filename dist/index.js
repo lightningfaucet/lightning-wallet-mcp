@@ -375,7 +375,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'pay_l402_api',
-            description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key.',
+            description: 'Make a request to a paid API. Supports L402 (Lightning) and X402 (USDC on Base) protocols. Platform fee on the API price: 1%, rounded down, no minimum, reported as fee in the response. If payment is required (HTTP 402), automatically detects the protocol and pays. L402 is preferred when both are available. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -400,7 +400,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'pay_invoice',
-            description: 'Pay a BOLT11 Lightning invoice. Returns the preimage as proof of payment. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key. If the response says pending:true the payment is still in flight: do NOT retry, check get_transactions instead.',
+            description: 'Pay a BOLT11 Lightning invoice. Platform fee: 1% of the amount, rounded down, no minimum (nothing under 100 sats), reported as platform_fee_sats; get_info returns the current schedule. Returns the preimage as proof of payment. Works with an operator key (pays from the operator wallet; a default agent is provisioned automatically) or an agent key. If the response says pending:true the payment is still in flight: do NOT retry, check get_transactions instead.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -511,7 +511,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'fund_agent',
-            description: 'Transfer sats from operator balance to an agent.',
+            description: 'Transfer sats from operator balance to an agent. No platform fee.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -626,7 +626,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'get_budget_status',
-            description: 'Get budget status for an agent - shows limit, spent, and remaining. Works with operator or agent keys.',
+            description: 'Get budget status for an agent - shows limit, spent, remaining and the platform_fees schedule that counts against it. Works with operator or agent keys.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -702,7 +702,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'get_info',
-            description: 'Get service information including version, status, limits, and supported features. No API key required — works before registering.',
+            description: 'Get service information including version, status, limits, supported features and the current platform_fees schedule (percent and minimum per action). No API key required — works before registering.',
             inputSchema: {
                 type: 'object',
                 properties: {},
@@ -734,7 +734,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'withdraw',
-            description: 'Withdraw funds from the operator account to an external Lightning invoice (minimum 10 sats; 1% platform fee, none under 100 sats; unused routing reserve refunded). REQUIRES OPERATOR KEY. Subject to a security cooldown after key rotation.',
+            description: 'Withdraw funds from the operator account to an external Lightning invoice (minimum 10 sats; no platform fee, only the Lightning routing fee at cost; unused routing reserve refunded). REQUIRES OPERATOR KEY. Subject to a security cooldown after key rotation.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -745,7 +745,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'create_withdraw_link',
-            description: 'Create an LNURL-withdraw link for the operator to receive funds. Opens in browser for QR code scanning with any Lightning wallet. Omit amount_sats to sweep full balance (minimum 10 sats after fees). REQUIRES OPERATOR KEY.',
+            description: 'Create an LNURL-withdraw link for the operator to receive funds. Opens in browser for QR code scanning with any Lightning wallet. Omit amount_sats to sweep full balance (minimum 10 sats after the routing reserve). No platform fee. REQUIRES OPERATOR KEY.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -773,7 +773,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'pay_lightning_address',
-            description: 'Pay to a Lightning address (user@domain.com format). Works with an operator key (pays from the operator wallet) or an agent key.',
+            description: 'Pay to a Lightning address (user@domain.com format). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. Works with an operator key (pays from the operator wallet) or an agent key.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -808,7 +808,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'nostr_zap',
-            description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set.',
+            description: 'Send a Nostr zap (NIP-57 Lightning payment with optional Nostr event). If the recipient supports NIP-57, a proper zap receipt is created. Otherwise falls back to a regular Lightning address payment. REQUIRES AGENT KEY with Nostr identity set. Paid as a Lightning-address payment: platform fee 1% of the amount, rounded down, no minimum, reported as platform_fee_sats.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -827,7 +827,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         // ==========================================
         {
             name: 'transfer_to_agent',
-            description: 'Transfer sats between agents or from operator to agent. REQUIRES OPERATOR KEY.',
+            description: 'Transfer sats between agents or from operator to agent. No platform fee. REQUIRES OPERATOR KEY.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -877,7 +877,7 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
         },
         {
             name: 'keysend',
-            description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). REQUIRES AGENT KEY.',
+            description: 'Send a payment directly to a node without an invoice (keysend/spontaneous payment). Platform fee: 1% of the amount, rounded down, no minimum, reported as platform_fee_sats. REQUIRES AGENT KEY.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -1546,6 +1546,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 total_spent_sats: result.totalSpentSats,
                                 remaining_sats: result.remainingSats,
                                 has_budget: result.hasBudget,
+                                platform_fees: result.rawResponse?.platform_fees,
                             }, null, 2),
                         },
                     ],
@@ -1684,6 +1685,7 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 max_payment_sats: result.maxPaymentSats,
                                 min_payment_sats: result.minPaymentSats,
                                 supported_features: result.supportedFeatures,
+                                platform_fees: result.rawResponse?.platform_fees,
                             }, null, 2),
                         },
                     ],
@@ -1813,6 +1815,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                 message: `Paid ${parsed.amount_sats} sats to ${parsed.address}`,
                                 amount_sats: result.amountSats,
                                 fee_sats: result.feeSats,
+                                routing_fee_sats: result.routingFeeSats,
+                                platform_fee_sats: result.platformFeeSats,
                                 payment_hash: result.paymentHash,
                                 new_balance: result.newBalance,
                             }, null, 2),
@@ -1869,6 +1873,8 @@ server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
                                     (result.zapType === 'nip57' ? ' (NIP-57 zap receipt created)' : ' (regular payment, recipient does not support NIP-57)'),
                                 amount_sats: result.amountSats,
                                 fee_sats: result.feeSats,
+                                routing_fee_sats: result.routingFeeSats,
+                                platform_fee_sats: result.platformFeeSats,
                                 payment_hash: result.paymentHash,
                                 new_balance: result.newBalance,
                                 zap_type: result.zapType,

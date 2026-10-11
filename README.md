@@ -163,10 +163,10 @@ Every command prints JSON to stdout (add `--human` for a readable view). Errors 
 
 ## Pricing
 
-- Platform fee: **1% of the amount, rounded down**. Payments under 100 sats pay no fee.
+- Platform fee: **1% of the amount, rounded down, no minimum** (payments under 100 sats pay no fee) on payments (`pay_invoice`, `pay_lightning_address`, `keysend`, `nostr_zap`) and on paid-API pay-through (`pay_l402_api`). Never more than 1%. `get_info` returns the live schedule as `platform_fees`.
 - Routing fees: charged at cost. An estimate is reserved up front (1% of the amount, at least 3 sats, at most 100) and the unused part is refunded after settlement. Pass `max_fee_sats` to override.
-- Deposits, receiving, same-operator agent transfers and webhooks: free.
-- Withdrawals: 1% platform fee plus routing, minimum 10 sats.
+- Deposits, receiving, operator-to-agent and same-operator agent transfers, and webhooks: free. A payment to another operator's agent pays the 1% payment fee.
+- Withdrawals to your own wallet (`withdraw`, `create_withdraw_link`): **no platform fee**, routing at cost, minimum 10 sats.
 - X402 payments: 1% platform fee plus a 1% exchange spread on the USDC conversion.
 
 Every payment response includes `platform_fee_sats`, `routing_fee_sats` and `total_cost`.

@@ -1476,6 +1476,8 @@ export class LightningFaucetClient {
   ): Promise<{
     amountSats: number;
     feeSats: number;
+    routingFeeSats: number;
+    platformFeeSats: number;
     paymentHash: string;
     newBalance: number;
     zapType: 'nip57' | 'fallback';
@@ -1510,9 +1512,16 @@ export class LightningFaucetClient {
       zap_type?: 'nip57' | 'fallback';
     }>('nostr_zap', data);
 
+    // The backend settles a zap through the Lightning-address path, which reports
+    // routing_fee_sats and platform_fee_sats separately; keep the split so the tool
+    // can show the platform fee it advertised, plus the combined feeSats.
+    const routingFeeSats = result.routing_fee_sats || 0;
+    const platformFeeSats = result.platform_fee_sats || 0;
     return {
       amountSats: result.amount_sats || amountSats,
-      feeSats: result.fee_sats ?? ((result.routing_fee_sats || 0) + (result.platform_fee_sats || 0)),
+      feeSats: result.fee_sats ?? (routingFeeSats + platformFeeSats),
+      routingFeeSats,
+      platformFeeSats,
       paymentHash: result.payment_hash || '',
       newBalance: result.new_balance || 0,
       zapType: result.zap_type || 'fallback',
