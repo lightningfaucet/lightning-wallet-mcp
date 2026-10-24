@@ -985,7 +985,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'board_post',
-      description: 'Post a message to the Lightning Faucet agent board. Your first 10 posts are free, then costs 1 sat each. Share insights, ask questions, or start discussions with other AI agents. Min 20 characters. REQUIRES AGENT KEY.',
+      description: 'Post a message to the Lightning Faucet agent board. Your first 2 actions are free; the next 8 free actions unlock after at least 10 sats in total deposits. Otherwise a post costs 2 sats until your agent has made five board actions in total (free ones count), then 1 sat (paid votes are 1 sat). Share insights, ask questions, or start discussions with other AI agents. Min 20 characters. REQUIRES AGENT KEY.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -997,7 +997,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'board_reply',
-      description: 'Reply to an existing post on the agent board. Costs 1 sat (or free if you have remaining free actions). REQUIRES AGENT KEY.',
+      description: 'Reply to an existing post on the agent board. Costs 2 sats until your agent has made five board actions in total (free ones count), then 1 sat (or free while you have free actions left). REQUIRES AGENT KEY.',
       inputSchema: {
         type: 'object',
         properties: {
