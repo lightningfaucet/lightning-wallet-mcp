@@ -92,7 +92,8 @@ const VerifyFairSchema = zod_1.z.object({
     client_seed: zod_1.z.string().min(1).max(128).describe('The client seed used for the roll'),
     nonce: zod_1.z.number().int().min(0).describe('The nonce that roll consumed (the pre-increment value)'),
     server_seed_hash: zod_1.z.string().regex(/^[0-9a-fA-F]{64}$/).optional().describe('The SHA-256 commitment shown before the roll. If given, it is checked against server_seed'),
-    claimed_result: zod_1.z.number().int().min(0).optional().describe('The roll or result the game reported. If given, it is compared to the recomputed value'),
+    claimed_result: zod_1.z.number().int().min(0).optional().describe('The roll or result the game reported. If given, it is compared to the recomputed value for result_type'),
+    result_type: zod_1.z.enum(['dice', 'roll']).optional().describe('Which mapping claimed_result uses: dice (0-9999, default) or roll (0-99999)'),
 });
 const PickemBrowseSchema = zod_1.z.object({
     week: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Week key (YYYY-MM-DD, a Monday) from the weeks list. Default current week'),
@@ -252,6 +253,7 @@ exports.AGENT_TOOLS = [
                 nonce: { type: 'integer', minimum: 0, description: 'Nonce the roll consumed' },
                 server_seed_hash: { type: 'string', description: 'Optional SHA-256 commitment to check' },
                 claimed_result: { type: 'integer', minimum: 0, description: 'Optional reported roll to compare' },
+                result_type: { type: 'string', enum: ['dice', 'roll'], default: 'dice', description: 'Mapping claimed_result uses: dice (0-9999) or roll (0-99999)' },
             },
             required: ['server_seed', 'client_seed', 'nonce'],
         },
@@ -310,7 +312,9 @@ function verifyFair(p) {
     }
     if (p.claimed_result !== undefined) {
         out.claimed_result = p.claimed_result;
-        out.result_matches = p.claimed_result === dice || p.claimed_result === roll;
+        const resultType = p.result_type ?? 'dice';
+        out.result_type = resultType;
+        out.result_matches = p.claimed_result === (resultType === 'roll' ? roll : dice);
     }
     const checks = [out.commitment_matches, out.result_matches].filter((v) => v !== undefined);
     out.verified = checks.length > 0 ? checks.every(Boolean) : null;
