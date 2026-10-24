@@ -290,9 +290,6 @@ async function platformRead(action, data = {}) {
         throw new lightning_faucet_js_1.ApiError(String(json.error ?? 'Unknown API error'), json);
     return json;
 }
-function truncate(text) {
-    return text.length > MAX_TEXT_CHARS ? { text: text.slice(0, MAX_TEXT_CHARS), truncated: true } : { text, truncated: false };
-}
 /** Pure, exported for tests. */
 function verifyFair(p) {
     const hash = (0, node_crypto_1.createHmac)('sha256', p.server_seed).update(`${p.client_seed}:${p.nonce}`).digest('hex');
@@ -367,12 +364,19 @@ async function handleAgentTool(name, args, session) {
             if (p.end_date)
                 data.end_date = p.end_date;
             const r = await agentOnly('export_transactions', () => session.requireClient().rawAction('export_transactions', data));
-            if (typeof r.csv === 'string') {
-                const t = truncate(r.csv);
-                return ok({ ...r, csv: t.text, truncated: t.truncated, ...(t.truncated ? { next: 'Output was cut. Narrow start_date and end_date and call again.' } : {}) });
-            }
             // Measure the pretty-printed form, which is what ok() actually returns.
             const size = (v) => JSON.stringify(v, null, 2).length;
+            if (typeof r.csv === 'string') {
+                const csv = r.csv;
+                const cutCsv = (n) => ({ ...r, csv: csv.slice(0, n), truncated: true, next: 'Output was cut. Narrow start_date and end_date and call again.' });
+                if (size(r) <= MAX_TEXT_CHARS)
+                    return ok({ ...r, truncated: false });
+                // JSON escaping inflates quotes/newlines, so shrink until the serialized response fits.
+                let n = Math.min(csv.length, MAX_TEXT_CHARS);
+                while (n > 0 && size(cutCsv(n)) > MAX_TEXT_CHARS)
+                    n = Math.floor(n * 0.8);
+                return ok(cutCsv(n));
+            }
             if (size(r) > MAX_TEXT_CHARS && Array.isArray(r.transactions)) {
                 const cut = (rows) => ({ ...r, transactions: rows, truncated: true, returned: rows.length, next: 'Output was cut. Narrow start_date and end_date and call again.' });
                 let rows = r.transactions;

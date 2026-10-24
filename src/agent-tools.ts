@@ -297,10 +297,6 @@ async function platformRead(action: string, data: Record<string, unknown> = {}):
   return json;
 }
 
-function truncate(text: string): { text: string; truncated: boolean } {
-  return text.length > MAX_TEXT_CHARS ? { text: text.slice(0, MAX_TEXT_CHARS), truncated: true } : { text, truncated: false };
-}
-
 /** Pure, exported for tests. */
 export function verifyFair(p: z.infer<typeof VerifyFairSchema>): Record<string, unknown> {
   const hash = createHmac('sha256', p.server_seed).update(`${p.client_seed}:${p.nonce}`).digest('hex');
@@ -371,12 +367,17 @@ export async function handleAgentTool(name: string, args: unknown, session: Sess
       if (p.start_date) data.start_date = p.start_date;
       if (p.end_date) data.end_date = p.end_date;
       const r = await agentOnly('export_transactions', () => session.requireClient().rawAction('export_transactions', data));
-      if (typeof r.csv === 'string') {
-        const t = truncate(r.csv);
-        return ok({ ...r, csv: t.text, truncated: t.truncated, ...(t.truncated ? { next: 'Output was cut. Narrow start_date and end_date and call again.' } : {}) });
-      }
       // Measure the pretty-printed form, which is what ok() actually returns.
       const size = (v: unknown) => JSON.stringify(v, null, 2).length;
+      if (typeof r.csv === 'string') {
+        const csv = r.csv;
+        const cutCsv = (n: number) => ({ ...r, csv: csv.slice(0, n), truncated: true, next: 'Output was cut. Narrow start_date and end_date and call again.' });
+        if (size(r) <= MAX_TEXT_CHARS) return ok({ ...r, truncated: false });
+        // JSON escaping inflates quotes/newlines, so shrink until the serialized response fits.
+        let n = Math.min(csv.length, MAX_TEXT_CHARS);
+        while (n > 0 && size(cutCsv(n)) > MAX_TEXT_CHARS) n = Math.floor(n * 0.8);
+        return ok(cutCsv(n));
+      }
       if (size(r) > MAX_TEXT_CHARS && Array.isArray(r.transactions)) {
         const cut = (rows: unknown[]) => ({ ...r, transactions: rows, truncated: true, returned: rows.length, next: 'Output was cut. Narrow start_date and end_date and call again.' });
         let rows = r.transactions as unknown[];
