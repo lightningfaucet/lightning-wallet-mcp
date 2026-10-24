@@ -8,16 +8,30 @@
     "url": "https://github.com/lightningfaucet/lightning-wallet-mcp",
     "source": "github"
   },
-  "version": "1.10.0",
+  "version": "1.11.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "lightning-wallet-mcp",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
       }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://lightningfaucet.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. \"Bearer <key>\" with your Lightning Faucet operator key (lf_...) or agent key (agent_...). Without it only the public read-only tools work. Get a key at https://lightningfaucet.com/ai-agents/",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }
