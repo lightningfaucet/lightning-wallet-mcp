@@ -242,6 +242,13 @@ export function capResult<T extends TextResult>(result: T, max = MAX_RESULT_CHAR
     original_chars: total,
     message: `Result was larger than ${max} characters and was cut. Narrow the request (filters, limit, date range) and call again.`,
   };
-  const room = Math.max(0, max - JSON.stringify(notice).length - 32);
-  return { ...result, content: [{ type: 'text', text: JSON.stringify({ ...notice, partial: joined.slice(0, room) }) }] };
+  // Escaping (quotes, backslashes, newlines) can grow `partial` when serialized, so measure the
+  // final text and shrink until it fits.
+  let room = Math.max(0, max - JSON.stringify(notice).length - 32);
+  let text = JSON.stringify({ ...notice, partial: joined.slice(0, room) });
+  while (text.length > max && room > 0) {
+    room = Math.floor(room * Math.min(0.9, max / text.length));
+    text = JSON.stringify({ ...notice, partial: joined.slice(0, room) });
+  }
+  return { ...result, content: [{ type: 'text', text }] };
 }

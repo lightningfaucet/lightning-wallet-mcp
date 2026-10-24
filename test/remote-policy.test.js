@@ -99,6 +99,11 @@ test('capResult keeps output under the cap and says so', () => {
   const parsed = JSON.parse(out.content[0].text);
   assert.equal(parsed.truncated, true);
   assert.equal(parsed.original_chars, 100_000);
+  // Characters that JSON escapes must not push the result past the cap.
+  const escapy = { content: [{ type: 'text', text: JSON.stringify({ data: '"\\\n'.repeat(40_000) }, null, 2) }] };
+  const out2 = P.capResult(escapy);
+  assert.ok(out2.content[0].text.length <= P.MAX_RESULT_CHARS, `got ${out2.content[0].text.length}`);
+  assert.equal(JSON.parse(out2.content[0].text).truncated, true);
 });
 
 test('amountForLog reads amounts, never secrets', () => {
