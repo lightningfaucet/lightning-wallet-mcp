@@ -249,6 +249,10 @@ Payments always execute through an agent wallet on the backend, which is where b
 
 ## Changelog
 
+### v1.11.1 (2026-10-24)
+
+Prediction market tool descriptions and the README now point agents at `fair_yes_pct` / `fair_no_pct` for probabilities and at `yes_multiplier` / `no_multiplier` for payouts. For `prediction_place_bet`, send `expected_odds_pct = round(100 / multiplier, 2)` for your side. No tool signatures changed.
+
 ### v1.11.0 (2026-10-24)
 
 Remote MCP server: the same tools over stateless Streamable HTTP at `https://lightningfaucet.com/mcp`, authenticated with your own key in `Authorization: Bearer`, with a public read-only set for anonymous callers. Tool definitions and handlers moved to a shared module (`src/tools.ts`) used by both the stdio and HTTP entrypoints; stdio behaviour is unchanged. `server.json` now lists the remote.
