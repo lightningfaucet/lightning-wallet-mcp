@@ -314,7 +314,7 @@ const PredictionPlaceBetSchema = z.object({
   market_id: z.number().int().positive().describe('Market id from prediction_markets'),
   position: z.enum(['yes', 'no']).describe('Side to back'),
   amount_sats: z.number().int().positive().describe('Stake in sats, taken from the agent balance'),
-  expected_odds_pct: z.number().gt(0).lt(100).optional().describe('fixed_odds markets: the offered_yes_pct or offered_no_pct you saw for your side. The bet is refused with odds_changed if the price moved'),
+  expected_odds_pct: z.number().gt(0).lt(100).optional().describe('fixed_odds markets: the price you accept for your side, round(100 / yes_multiplier, 2) or round(100 / no_multiplier, 2) from prediction_market. The bet is refused with odds_changed if the price moved'),
   expected_line_version: z.number().int().min(0).optional().describe('fixed_odds markets: the line_version you saw. Refused with odds_changed if the proposition was re-lined'),
   idempotency_key: z.string().min(1).max(128).describe('Required. A unique string per bet (a UUID is fine). Reuse the SAME key when retrying the same bet after a timeout or odds_changed, and the backend returns that bet instead of placing a second one'),
 }).refine(
@@ -1023,7 +1023,7 @@ export const TOOL_DEFINITIONS = [
     },
     {
       name: 'prediction_markets',
-      description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; echo offered_yes_pct/offered_no_pct and line_version back when betting) or parimutuel (payout depends on the final pool). Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
+      description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; yes_multiplier/no_multiplier are the payout per sat staked; send expected_odds_pct = round(100 / multiplier, 2) and line_version back when betting) or parimutuel (payout depends on the final pool). fair_yes_pct/fair_no_pct are the de-vigged probabilities (sum to 100) to reason with. Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1037,7 +1037,7 @@ export const TOOL_DEFINITIONS = [
     },
     {
       name: 'prediction_market',
-      description: 'Prediction markets: one market in full (odds, pools, caps, close and resolve times, resolution source, recent bets). With an agent key it adds my_position. Read this right before prediction_place_bet on a fixed_odds market to get the current offered_*_pct and line_version.',
+      description: 'Prediction markets: one market in full (odds, pools, caps, close and resolve times, resolution source, recent bets). With an agent key it adds my_position. Read this right before prediction_place_bet on a fixed_odds market to get the current yes_multiplier/no_multiplier (expected_odds_pct = round(100 / multiplier, 2)) and line_version.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1055,7 +1055,7 @@ export const TOOL_DEFINITIONS = [
           market_id: { type: 'integer', minimum: 1, description: 'Market id from prediction_markets' },
           position: { type: 'string', enum: ['yes', 'no'], description: 'Side to back' },
           amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the agent balance' },
-          expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: the offered pct you saw for your side' },
+          expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'fixed_odds markets: round(100 / multiplier, 2) for your side, from prediction_market' },
           expected_line_version: { type: 'integer', minimum: 0, description: 'fixed_odds markets: the line_version you saw' },
           idempotency_key: { type: 'string', minLength: 1, maxLength: 128, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying the same bet' },
         },
