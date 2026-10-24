@@ -47,6 +47,19 @@ That is it. `register_operator` saves your credentials to `~/.lightning-wallet/c
 }
 ```
 
+**Remote server (no install)**: hosted AI apps and agent frameworks that speak MCP over HTTP can connect to
+
+```
+https://lightningfaucet.com/mcp
+```
+
+It is a stateless Streamable HTTP endpoint with the same tools. Without a key you get the public read-only set (`get_info`, `decode_invoice`, `list_l402_apis`, `verify_fair`, `prediction_markets`, `prediction_market`, `arena_list`, `arena_leaderboard`, `gateway_catalog`, `pickem_browse`, `tournament_list`). For everything else send your own key on every request as `Authorization: Bearer <key>`; an agent key (`agent_...`) with a budget and spend policy is the safe choice. The server stores no keys, so `register_operator`, `recover_account` and the local credential tools are stdio only: create a key at [lightningfaucet.com/ai-agents](https://lightningfaucet.com/ai-agents/) or with the local package first.
+
+```bash
+claude mcp add --transport http lightning-wallet https://lightningfaucet.com/mcp \
+  --header "Authorization: Bearer agent_your_agent_key"
+```
+
 **CLI** (any agent framework, CI, or a plain shell):
 
 ```bash
@@ -216,6 +229,11 @@ Set `PRE_PAYMENT_HOOK_URL` and every outgoing payment (`pay_l402_api`, `pay_invo
 - Keep the recovery code offline. It is the only way back in if the key is lost.
 - Use agent keys with budgets for anything autonomous; the operator key can withdraw.
 - Verify webhook payloads: compare `X-Webhook-Signature` with the HMAC-SHA256 of the raw body under your webhook secret.
+- Remote server: keys travel only in the `Authorization` header over HTTPS and are never stored or logged (logs carry a short hash). It refuses key-management tools, rate limits per IP and per key, caps request and response size, validates `Origin`, and only ever talks to the Lightning Faucet API. Operators of the server can switch off every money-moving tool at once.
+
+### Self-hosting the remote server
+
+`lightning-wallet-mcp-http` (`dist/http-server.js`) runs the Streamable HTTP server. It listens on `LF_MCP_HOST:LF_MCP_PORT` (default `127.0.0.1:8893`) and is meant to sit behind a reverse proxy that sets `X-Real-IP`. Main settings: `LIGHTNING_WALLET_API_URL`, `LF_MCP_TRUSTED_PROXIES`, `LF_MCP_ALLOWED_HOSTS`, `LF_MCP_ALLOWED_ORIGINS`, `LF_MCP_MAX_BODY_BYTES`, the `LF_MCP_RL_*` rate limits, and the kill switch (`LF_MCP_KILL_SWITCH=1`, or create the file named by `LF_MCP_KILL_SWITCH_FILE`). `GET /health` reports status. `PRE_PAYMENT_HOOK_URL` must not be set on a shared server.
 
 ## Architecture
 
@@ -230,6 +248,10 @@ OPERATOR (your account)          holds funds, withdraws, sets budgets, gets webh
 Payments always execute through an agent wallet on the backend, which is where budgets and daily limits are enforced. You only need to think about that when you want more than one wallet.
 
 ## Changelog
+
+### v1.11.0 (2026-10-24)
+
+Remote MCP server: the same tools over stateless Streamable HTTP at `https://lightningfaucet.com/mcp`, authenticated with your own key in `Authorization: Bearer`, with a public read-only set for anonymous callers. Tool definitions and handlers moved to a shared module (`src/tools.ts`) used by both the stdio and HTTP entrypoints; stdio behaviour is unchanged. `server.json` now lists the remote.
 
 ### v1.10.0 (2026-10-24)
 
