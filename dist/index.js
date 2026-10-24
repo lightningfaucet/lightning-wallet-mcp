@@ -20,6 +20,7 @@ const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const zod_1 = require("zod");
+const agent_tools_js_1 = require("./agent-tools.js");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
 const credentials_js_1 = require("./credentials.js");
 // Package is built as CommonJS, so a plain require resolves ../package.json at runtime.
@@ -1074,12 +1075,16 @@ server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => ({
             description: 'Prediction markets: open positions (stake per side per market, potential payout, close time) and total at stake. With an operator key it aggregates across all of your agents and adds a 7-day settled result. REQUIRES AGENT OR OPERATOR KEY.',
             inputSchema: { type: 'object', properties: {} },
         },
+        ...agent_tools_js_1.AGENT_TOOLS,
     ],
 }));
 // Handle tool calls
 server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     try {
+        const agentToolResult = await (0, agent_tools_js_1.handleAgentTool)(name, args, session);
+        if (agentToolResult)
+            return agentToolResult;
         switch (name) {
             case 'check_balance': {
                 CheckBalanceSchema.parse(args ?? {});

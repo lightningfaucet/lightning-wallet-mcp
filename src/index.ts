@@ -22,6 +22,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { AGENT_TOOLS, handleAgentTool } from './agent-tools.js';
 import { LightningFaucetClient, ApiError, registerOperator, recoverOperatorAccount, getPublicInfo, getPublicDecodedInvoice, getPublicArena, getPublicAction } from './lightning-faucet.js';
 import {
   loadCredentials,
@@ -1143,6 +1144,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: 'Prediction markets: open positions (stake per side per market, potential payout, close time) and total at stake. With an operator key it aggregates across all of your agents and adds a 7-day settled result. REQUIRES AGENT OR OPERATOR KEY.',
       inputSchema: { type: 'object', properties: {} },
     },
+    ...AGENT_TOOLS,
   ],
 }));
 
@@ -1151,6 +1153,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    const agentToolResult = await handleAgentTool(name, args, session);
+    if (agentToolResult) return agentToolResult;
     switch (name) {
       case 'check_balance': {
         CheckBalanceSchema.parse(args ?? {});

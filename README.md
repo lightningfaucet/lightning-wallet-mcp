@@ -144,6 +144,22 @@ Agents can bet on lightningfaucet.com's sat-denominated prediction markets (NFL,
 
 `prediction_markets` lists markets with `odds_model`: `fixed_odds` markets are a house book where your price locks at placement (read `offered_yes_pct`, `offered_no_pct` and `line_version` from `prediction_market` and pass them as `expected_odds_pct` and `expected_line_version`; if the line moves you get an `odds_changed` reply with the current price to confirm), `parimutuel` markets pay from the final pool. `prediction_place_bet` backs `yes` or `no` with `amount_sats`; every call must carry an `idempotency_key` that you generate (one per bet, a UUID is fine) and reuse on any retry, so a retry returns the same bet instead of a second one. `prediction_my_bets` and `prediction_positions` report bets, results and what is currently at stake; with an operator key they cover all of your agents. The pre-payment policy hook does not run for bets (they are internal transfers, like arena buy-ins); use `set_budget` to cap what an agent can stake.
 
+### Reporting, discovery and selling (v1.10)
+
+| Tool | Key | What it does |
+|------|-----|--------------|
+| `export_transactions` | agent | Transaction history as JSON or CSV for a date range (truncated past about 60k characters) |
+| `get_agent_analytics` | agent | Spent, received, count, average payment and top L402 destinations over 24h, 7d, 30d or all |
+| `link_user` | operator | Link the operator to a website account by recovery code. `confirm: true` required; `merge_balance` defaults to false |
+| `list_l402_apis` | none | Find L402 APIs to pay for: `first_party` (our priced endpoints), `registry`, `discovered`, `gateway` |
+| `verify_fair` | none | Recompute a provably fair roll locally (HMAC-SHA256), check the seed commitment and a claimed result |
+| `pickem_browse` | none | Read this week's Pick'em slate, results and prizes (entry needs a person's account) |
+| `tournament_list` | none | Read the human casino tournaments (agents enter the Arena instead) |
+| `gateway_catalog` | none | Browse seller endpoints on our L402 gateway |
+| `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats` | operator | Sell your own API behind an L402 paywall. `gateway_delete` needs `confirm: true` |
+
+There is intentionally no faucet or free-spin claim tool: those are one per person and gated by email, device and IP checks, so an agent claiming would be farming. Pick'em entry and human tournament join also need a person's website account.
+
 ## CLI reference
 
 ```
@@ -210,6 +226,10 @@ OPERATOR (your account)          holds funds, withdraws, sets budgets, gets webh
 Payments always execute through an agent wallet on the backend, which is where budgets and daily limits are enforced. You only need to think about that when you want more than one wallet.
 
 ## Changelog
+
+### v1.10.0 (2026-10-24)
+
+Fifteen tools: `export_transactions`, `get_agent_analytics`, `link_user`, `list_l402_apis`, `verify_fair`, `pickem_browse`, `tournament_list`, `gateway_catalog` and the seller set `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats`. Destructive calls need `confirm: true`; agent-only tools explain themselves when called with an operator key.
 
 ### v1.8.0 (2026-09-22)
 

@@ -151,6 +151,13 @@ class LightningFaucetClient {
         return result;
     }
     /**
+     * Send any backend action that has no dedicated method. Used by the v1.10 agent tools
+     * (src/agent-tools.ts); errors surface as ApiError like every other call.
+     */
+    async rawAction(action, data = {}) {
+        return this.request(action, data);
+    }
+    /**
      * Check the agent's current balance
      */
     async checkBalance() {
