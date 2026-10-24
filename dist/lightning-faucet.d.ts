@@ -150,6 +150,11 @@ export declare class LightningFaucetClient {
      */
     private request;
     /**
+     * Send any backend action that has no dedicated method. Used by the v1.10 agent tools
+     * (src/agent-tools.ts); errors surface as ApiError like every other call.
+     */
+    rawAction(action: string, data?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    /**
      * Check the agent's current balance
      */
     checkBalance(): Promise<{
@@ -635,7 +640,7 @@ export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt?: string;
     rawResponse: ApiResponse;
 }>;
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered';
 export declare function getPublicArena(action: 'arena_list' | 'arena_leaderboard', data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 export declare function getPublicAction(action: PublicReadAction, data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 /**

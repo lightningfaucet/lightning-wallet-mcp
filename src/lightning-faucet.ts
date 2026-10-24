@@ -307,6 +307,14 @@ export class LightningFaucetClient {
   }
 
   /**
+   * Send any backend action that has no dedicated method. Used by the v1.10 agent tools
+   * (src/agent-tools.ts); errors surface as ApiError like every other call.
+   */
+  async rawAction(action: string, data: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>(action, data);
+  }
+
+  /**
    * Check the agent's current balance
    */
   async checkBalance(): Promise<{
@@ -1842,7 +1850,7 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
 }
 
 // Public reads (no API key needed) so first-run agents can browse tournaments and markets
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered';
 
 export async function getPublicArena(
   action: 'arena_list' | 'arena_leaderboard',
