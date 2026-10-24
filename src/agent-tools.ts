@@ -375,11 +375,13 @@ export async function handleAgentTool(name: string, args: unknown, session: Sess
         const t = truncate(r.csv);
         return ok({ ...r, csv: t.text, truncated: t.truncated, ...(t.truncated ? { next: 'Output was cut. Narrow start_date and end_date and call again.' } : {}) });
       }
-      const s = JSON.stringify(r);
-      if (s.length > MAX_TEXT_CHARS && Array.isArray(r.transactions)) {
+      // Measure the pretty-printed form, which is what ok() actually returns.
+      const size = (v: unknown) => JSON.stringify(v, null, 2).length;
+      if (size(r) > MAX_TEXT_CHARS && Array.isArray(r.transactions)) {
+        const cut = (rows: unknown[]) => ({ ...r, transactions: rows, truncated: true, returned: rows.length, next: 'Output was cut. Narrow start_date and end_date and call again.' });
         let rows = r.transactions as unknown[];
-        while (rows.length > 1 && JSON.stringify(rows).length > MAX_TEXT_CHARS) rows = rows.slice(0, Math.ceil(rows.length / 2));
-        return ok({ ...r, transactions: rows, truncated: true, returned: rows.length, next: 'Output was cut. Narrow start_date and end_date and call again.' });
+        while (rows.length > 1 && size(cut(rows)) > MAX_TEXT_CHARS) rows = rows.slice(0, Math.ceil(rows.length / 2));
+        return ok(cut(rows));
       }
       return ok(r);
     }
