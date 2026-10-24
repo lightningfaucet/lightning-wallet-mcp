@@ -126,3 +126,12 @@ test('agent-only tools explain themselves when called with an operator key', asy
     await assert.rejects(handleAgentTool('export_transactions', {}, session), (e) => e.message === 'requires_agent_key' && /set_agent_credentials/.test(e.response.hint));
   });
 });
+
+test('verify_fair compares the claim against one explicit mapping', () => {
+  // nonce 0 gives roll 40039 and dice 39: a dice claim of 40039 must not verify.
+  const base = { server_seed: 'serverseed', client_seed: 'client1', nonce: 0 };
+  assert.equal(verifyFair({ ...base, claimed_result: 39 }).verified, true);
+  assert.equal(verifyFair({ ...base, claimed_result: 40039 }).verified, false);
+  assert.equal(verifyFair({ ...base, claimed_result: 40039, result_type: 'roll' }).verified, true);
+  assert.equal(verifyFair({ ...base, claimed_result: 39, result_type: 'roll' }).verified, false);
+});

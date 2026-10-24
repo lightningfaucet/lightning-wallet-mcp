@@ -229,7 +229,7 @@ Payments always execute through an agent wallet on the backend, which is where b
 
 ### v1.10.0 (2026-10-24)
 
-Fifteen tools: `export_transactions`, `get_agent_analytics`, `link_user`, `list_l402_apis`, `verify_fair`, `pickem_browse`, `tournament_list`, `gateway_catalog` and the seller set `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats`. Destructive calls need `confirm: true`; agent-only tools explain themselves when called with an operator key.
+Sixteen tools: `export_transactions`, `get_agent_analytics`, `link_user`, `list_l402_apis`, `verify_fair`, `pickem_browse`, `tournament_list`, `gateway_catalog` and the seller set `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats`. Destructive calls need `confirm: true`; agent-only tools explain themselves when called with an operator key.
 
 ### v1.8.0 (2026-09-22)
 
