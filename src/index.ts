@@ -396,6 +396,7 @@ const PREDICTION_REFUSALS = new Set([
   'odds_changed', 'position_cap_exceeded', 'budget_exceeded', 'insufficient_balance', 'bet_in_progress',
   'house_exposure_cap', 'odds_unavailable', 'market_closed', 'pool_limit_reached', 'min_bet_not_met',
   'max_bet_exceeded', 'feature_disabled', 'busy', 'rate_limited',
+  'per_tx_cap_exceeded', 'daily_cap_exceeded', 'per_market_cap_exceeded', 'loss_cap_reached', 'cooldown_active',
 ]);
 function predictionNextHint(error: string): string {
   switch (error) {
@@ -418,6 +419,13 @@ function predictionNextHint(error: string): string {
       return 'Betting is paused while the line updates. Re-read prediction_market shortly.';
     case 'market_closed':
       return 'This market no longer takes bets. List open markets with prediction_markets.';
+    case 'per_tx_cap_exceeded':
+    case 'daily_cap_exceeded':
+    case 'per_market_cap_exceeded':
+      return 'A spend limit set by your operator blocks this stake. Stake at most the remaining or max_allowed amount, or ask your operator to change it (set_spend_policy). Read your limits with get_spend_policy.';
+    case 'loss_cap_reached':
+    case 'cooldown_active':
+      return 'Responsible-gambling limit reached: this agent has lost its daily cap and gambling is paused. Do not retry until retry_after_seconds has passed; payments and other tools still work.';
     case 'feature_disabled':
       return 'Agent betting is not enabled on the server yet.';
     default:
@@ -2343,7 +2351,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (error instanceof ApiError) {
       const r = error.response;
       const extra: Record<string, unknown> = {};
-      for (const k of ['hint', 'cooldown_until', 'seconds_remaining', 'required', 'available', 'balance_sats', 'shortfall_sats', 'min_amount_sats'] as const) {
+      for (const k of ['hint', 'cooldown_until', 'seconds_remaining', 'required', 'available', 'balance_sats', 'shortfall_sats', 'min_amount_sats', 'cap_sats', 'used_24h_sats', 'remaining_sats', 'max_allowed_sats', 'requested_sats', 'retry_after_seconds', 'loss_24h_sats', 'staked_sats', 'market_id', 'pending_changes', 'next'] as const) {
         if (r[k] !== undefined) extra[k] = r[k];
       }
       return {

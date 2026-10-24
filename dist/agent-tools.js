@@ -95,6 +95,18 @@ const VerifyFairSchema = zod_1.z.object({
     claimed_result: zod_1.z.number().int().min(0).optional().describe('The roll or result the game reported. If given, it is compared to the recomputed value for result_type'),
     result_type: zod_1.z.enum(['dice', 'roll']).optional().describe('Which mapping claimed_result uses: dice (0-9999, default) or roll (0-99999)'),
 });
+const SpendPolicyGetSchema = zod_1.z.object({
+    agent_id: zod_1.z.number().int().positive().optional().describe('Operator key only: the agent to read. An agent key reads its own'),
+});
+const limitField = (what) => zod_1.z.number().int().min(0).max(100_000_000).nullable().optional().describe(`${what}. 0 or null clears the limit`);
+const SpendPolicySetSchema = zod_1.z.object({
+    agent_id: zod_1.z.number().int().positive().describe('Agent id from list_agents'),
+    per_tx_max_sats: limitField('Largest single spend in sats'),
+    daily_max_sats: limitField('Rolling 24 hour gross spend in sats'),
+    per_market_max_sats: limitField('Net stake on any one prediction market in sats'),
+    daily_loss_cap_sats: limitField('Responsible gambling: net gambling loss in 24 hours before bets and arena stop'),
+    cooldown_minutes: zod_1.z.number().int().min(0).max(10080).nullable().optional().describe('Responsible gambling: pause length once the loss cap is hit. 0 or null clears it'),
+}).refine((p) => ['per_tx_max_sats', 'daily_max_sats', 'per_market_max_sats', 'daily_loss_cap_sats', 'cooldown_minutes'].some((k) => p[k] !== undefined), { message: 'Pass at least one limit to change' });
 const PickemBrowseSchema = zod_1.z.object({
     week: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Week key (YYYY-MM-DD, a Monday) from the weeks list. Default current week'),
 });
@@ -256,6 +268,30 @@ exports.AGENT_TOOLS = [
                 result_type: { type: 'string', enum: ['dice', 'roll'], default: 'dice', description: 'Mapping claimed_result uses: dice (0-9999) or roll (0-99999)' },
             },
             required: ['server_seed', 'client_seed', 'nonce'],
+        },
+    },
+    {
+        name: 'get_spend_policy',
+        description: 'Read the spend limits on an agent: per-transaction, daily, per-market and responsible-gambling (daily loss cap, cooldown) limits, any pending loosening and an active cooldown. null means no limit. New agents start with conservative defaults. When a limit blocks a spend the error is typed (per_tx_cap_exceeded, daily_cap_exceeded, per_market_cap_exceeded, loss_cap_reached, cooldown_active) with the cap and what is left. Read-only. Agent key reads its own; operator key passes agent_id.',
+        inputSchema: {
+            type: 'object',
+            properties: { agent_id: { type: 'integer', minimum: 1, description: 'Operator key only' } },
+        },
+    },
+    {
+        name: 'set_spend_policy',
+        description: 'Set spend limits on one of your agents. Pass only the fields to change; 0 or null clears a limit. Tightening applies at once. Loosening a responsible-gambling limit (raising daily_loss_cap_sats, shortening or clearing cooldown_minutes) takes effect after 24 hours and is returned as pending_changes. Only the operator can set limits: an agent cannot raise its own. REQUIRES OPERATOR KEY.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                agent_id: { type: 'integer', minimum: 1 },
+                per_tx_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Largest single spend' },
+                daily_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Rolling 24h gross spend' },
+                per_market_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Net stake on one prediction market' },
+                daily_loss_cap_sats: { type: ['integer', 'null'], minimum: 0, description: 'Net gambling loss in 24h before bets and arena stop' },
+                cooldown_minutes: { type: ['integer', 'null'], minimum: 0, maximum: 10080, description: 'Pause once the loss cap is hit' },
+            },
+            required: ['agent_id'],
         },
     },
     {
@@ -424,6 +460,18 @@ async function handleAgentTool(name, args, session) {
             const c = session.getClient();
             const r = c ? await c.rawAction(act, data) : await (0, lightning_faucet_js_1.getPublicAction)(act, data);
             return ok({ source: p.source, ...r, next: 'Call an entry with pay_l402_api (set max_payment_sats).' });
+        }
+        case 'get_spend_policy': {
+            const p = SpendPolicyGetSchema.parse(a);
+            return ok(await session.requireClient().rawAction('get_spend_policy', p.agent_id ? { agent_id: p.agent_id } : {}));
+        }
+        case 'set_spend_policy': {
+            const p = SpendPolicySetSchema.parse(a);
+            const data = {};
+            for (const [k, v] of Object.entries(p))
+                if (v !== undefined)
+                    data[k] = v;
+            return ok(await session.requireClient().rawAction('set_spend_policy', data));
         }
         case 'verify_fair': return ok(verifyFair(VerifyFairSchema.parse(a)));
         case 'pickem_browse': {

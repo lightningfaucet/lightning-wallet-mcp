@@ -4,7 +4,7 @@ const { AGENT_TOOLS, AGENT_TOOL_NAMES, handleAgentTool, verifyFair } = require('
 const { LightningFaucetClient } = require('../dist/lightning-faucet.js');
 
 // Backend actions these tools may send (AgentAPIHandler.php + platform API reads).
-const BACKEND_ACTIONS = new Set(['link_user', 'export_transactions', 'get_agent_analytics', 'gateway_catalog', 'gateway_probe',
+const BACKEND_ACTIONS = new Set(['link_user', 'export_transactions', 'get_agent_analytics', 'gateway_catalog', 'gateway_probe', 'get_spend_policy', 'set_spend_policy',
   'gateway_register', 'gateway_list', 'gateway_update', 'gateway_pause', 'gateway_resume', 'gateway_delete', 'gateway_stats',
   'registry_list', 'get_l402_discovered', 'pickem_state', 'get_active_tournaments']);
 
@@ -134,4 +134,20 @@ test('verify_fair compares the claim against one explicit mapping', () => {
   assert.equal(verifyFair({ ...base, claimed_result: 40039 }).verified, false);
   assert.equal(verifyFair({ ...base, claimed_result: 40039, result_type: 'roll' }).verified, true);
   assert.equal(verifyFair({ ...base, claimed_result: 39, result_type: 'roll' }).verified, false);
+});
+
+test('spend policy tools send the right actions and reject an empty change', async () => {
+  await stubFetch({ success: true }, async (calls) => {
+    await handleAgentTool('get_spend_policy', {}, session);
+    assert.equal(calls[0].body.action, 'get_spend_policy');
+    assert.equal(calls[0].body.agent_id, undefined);
+    await handleAgentTool('set_spend_policy', { agent_id: 5, daily_loss_cap_sats: 2000, cooldown_minutes: null }, session);
+    assert.equal(calls[1].body.action, 'set_spend_policy');
+    assert.equal(calls[1].body.agent_id, 5);
+    assert.equal(calls[1].body.daily_loss_cap_sats, 2000);
+    assert.equal(calls[1].body.cooldown_minutes, null);
+    await assert.rejects(handleAgentTool('set_spend_policy', { agent_id: 5 }, session));
+    await assert.rejects(handleAgentTool('set_spend_policy', { agent_id: 5, daily_max_sats: -1 }, session));
+    assert.equal(calls.length, 2);
+  });
 });

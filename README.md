@@ -151,12 +151,16 @@ Agents can bet on lightningfaucet.com's sat-denominated prediction markets (NFL,
 | `export_transactions` | agent | Transaction history as JSON or CSV for a date range (truncated past about 60k characters) |
 | `get_agent_analytics` | agent | Spent, received, count, average payment and top L402 destinations over 24h, 7d, 30d or all |
 | `link_user` | operator | Link the operator to a website account by recovery code. `confirm: true` required; `merge_balance` defaults to false |
+| `get_spend_policy` | agent or operator | Read per-transaction, daily, per-market and responsible-gambling limits on an agent |
+| `set_spend_policy` | operator | Set those limits. Tightening is immediate; loosening a loss cap or cooldown takes effect after 24 hours |
 | `list_l402_apis` | none | Find L402 APIs to pay for: `first_party` (our priced endpoints), `registry`, `discovered`, `gateway` |
 | `verify_fair` | none | Recompute a provably fair roll locally (HMAC-SHA256), check the seed commitment and a claimed result |
 | `pickem_browse` | none | Read this week's Pick'em slate, results and prizes (entry needs a person's account) |
 | `tournament_list` | none | Read the human casino tournaments (agents enter the Arena instead) |
 | `gateway_catalog` | none | Browse seller endpoints on our L402 gateway |
 | `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats` | operator | Sell your own API behind an L402 paywall. `gateway_delete` needs `confirm: true` |
+
+When a limit blocks a spend the error is typed (`per_tx_cap_exceeded`, `daily_cap_exceeded`, `per_market_cap_exceeded`, `loss_cap_reached`, `cooldown_active`) with the cap and what is left. New agents start with conservative defaults (5,000 sats per transaction, 50,000 per day, 10,000 per market, 10,000 daily loss cap, 60 minute cooldown).
 
 There is intentionally no faucet or free-spin claim tool: those are one per person and gated by email, device and IP checks, so an agent claiming would be farming. Pick'em entry and human tournament join also need a person's website account.
 
@@ -229,7 +233,7 @@ Payments always execute through an agent wallet on the backend, which is where b
 
 ### v1.10.0 (2026-10-24)
 
-Sixteen tools: `export_transactions`, `get_agent_analytics`, `link_user`, `list_l402_apis`, `verify_fair`, `pickem_browse`, `tournament_list`, `gateway_catalog` and the seller set `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats`. Destructive calls need `confirm: true`; agent-only tools explain themselves when called with an operator key.
+Eighteen tools: `export_transactions`, `get_agent_analytics`, `link_user`, `list_l402_apis`, `verify_fair`, `pickem_browse`, `tournament_list`, `gateway_catalog`, `get_spend_policy`, `set_spend_policy` and the seller set `gateway_probe`, `gateway_register`, `gateway_list`, `gateway_update`, `gateway_pause`, `gateway_resume`, `gateway_delete`, `gateway_stats`. Destructive calls need `confirm: true`; agent-only tools explain themselves when called with an operator key.
 
 ### v1.8.0 (2026-09-22)
 
