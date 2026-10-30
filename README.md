@@ -16,9 +16,9 @@ Your agent can pay for L402 and X402 APIs, pay any Lightning invoice or Lightnin
 claude mcp add lightning-wallet -- npx -y lightning-wallet-mcp
 ```
 
-Then in Claude: *"Register a Lightning wallet for me with the email you@example.com"*.
+Then in Claude: *"Register a Lightning wallet for me"*.
 
-That is it. `register_operator` saves your credentials to `~/.lightning-wallet/credentials.json` (mode 0600) and every later session reuses them automatically. Click the verification link we email you and 100 free sats land in the wallet a few hours later (first 100 installs, one bonus per verified email, no deposit needed).
+That is it. `register_operator` saves your credentials to `~/.lightning-wallet/credentials.json` (mode 0600) and every later session reuses them automatically. Registering is free. Your first paid call needs a small deposit: ask for a deposit invoice with `get_deposit_invoice` (or `lw deposit <sats>` on the CLI) and pay it from any Lightning wallet. An email address is optional and only used for notifications; click the verification link if you add one.
 
 **Cursor / Windsurf / any MCP host** (`.cursor/mcp.json`, `.mcp.json`, or the host's MCP settings):
 
@@ -64,7 +64,8 @@ claude mcp add --transport http lightning-wallet https://lightningfaucet.com/mcp
 
 ```bash
 npm install -g lightning-wallet-mcp
-lw register --name "My Bot" --email you@example.com   # saves credentials locally, no export needed
+lw register                      # free; saves credentials locally, no export needed (--email you@example.com is optional, for notifications)
+lw deposit 500                   # prints a Lightning invoice; pay it to fund the wallet
 lw balance
 lw pay-api https://lightningfaucet.com/api/l402/fortune
 lw pay <bolt11>
@@ -123,7 +124,7 @@ All 46 tools work with the operator key unless noted. Switch to an agent key wit
 |------|-------------|
 | `register_operator` | Create an account; credentials are saved locally |
 | `update_operator` | Set email (sends a verification link) or display name |
-| `claim_promo` | Claim the install promo manually (it is also granted automatically after verification) |
+| `claim_promo` | Reports install promo status. The 100-sat launch promo has ended; the tool is kept for backward compatibility |
 | `withdraw` | Withdraw to an external invoice (minimum 10 sats) |
 | `create_withdraw_link` | LNURL-withdraw link to sweep into any wallet by QR |
 | `recover_account` | Recover with the recovery code (rotates the key) |
@@ -180,7 +181,7 @@ There is intentionally no faucet or free-spin claim tool: those are one per pers
 ## CLI reference
 
 ```
-lw register [--name "..."] [--email you@example.com]
+lw register [--name "..."] [--email you@example.com] [--force]
 lw use-key <api_key> [--agent]      lw credentials      lw forget      lw recover <code>
 lw whoami | balance | info
 lw pay <bolt11> [--max-fee 10]      lw pay-address user@domain 100 [--comment "..."]
@@ -286,7 +287,7 @@ Accept real BOLT11 invoices in the tool schemas; tolerate omitted MCP args; vali
 Pre-payment policy hook.
 
 ### v1.4.x (2026-06)
-`update_operator`, `claim_promo`, keyless `get_info`, the install promo.
+`update_operator`, `claim_promo`, keyless `get_info`, the launch install promo (now ended).
 
 ### v1.3.0
 L402 protocol v0 headers, `.well-known/l402.json` discovery.

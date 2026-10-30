@@ -596,7 +596,7 @@ export declare class LightningFaucetClient {
     predictionPositions(): Promise<Record<string, unknown>>;
     /**
      * Update operator profile (email and/or name). Setting an email sends a
-     * verification link - a verified email is required for the free-sats promo.
+     * verification link - an email is optional and used for notifications.
      */
     updateOperator(opts: {
         email?: string;
@@ -607,8 +607,7 @@ export declare class LightningFaucetClient {
         email_verification?: string;
     }>;
     /**
-     * Claim a promo bonus (default: the first_100_installs free-sats promo).
-     * Requires a verified email and an operator account at least 3 hours old.
+     * Report promo status (the first_100_installs launch promo has ended; kept for backward compatibility).
      */
     claimPromo(promoCode?: string): Promise<ApiResponse & {
         promo?: string;

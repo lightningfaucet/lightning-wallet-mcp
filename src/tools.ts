@@ -95,7 +95,7 @@ const GetTransactionsSchema = z.object({
 // Operator management schemas
 const RegisterOperatorSchema = z.object({
   name: z.string().optional().describe('Name for the operator account'),
-  email: z.string().email().optional().describe('Your email — register WITH it to claim the 100 free-sats install promo. A verification link is sent; once verified, claim_promo funds your wallet. Strongly recommended.'),
+  email: z.string().email().optional().describe('Optional email address, used for notifications and account notices. A verification link is sent.'),
 });
 
 const GetDepositInvoiceSchema = z.object({
@@ -459,19 +459,19 @@ export const TOOL_DEFINITIONS = [
     // Operator management tools
     {
       name: 'register_operator',
-      description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later! Tip: pass an email to claim the 100 free-sats install promo.',
+      description: 'Register a new operator account. Returns API key and recovery code. SAVE THESE - they cannot be retrieved later! Registering is free; your first paid call needs a small deposit (use get_deposit_invoice).',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Name for the operator account (optional)' },
-          email: { type: 'string', description: 'Email address — pass it here to claim the 100 free-sats install promo (a verification link is sent; once verified, and once the operator account is at least 3 hours old, call claim_promo to get funded). Also used for onboarding tips and important account notices.' },
+          email: { type: 'string', description: 'Optional email address, used for notifications and important account notices. A verification link is sent.' },
         },
         required: [],
       },
     },
     {
       name: 'update_operator',
-      description: 'Update operator profile: set your email (sends a verification link - required for the free-sats promo) and/or display name. REQUIRES OPERATOR KEY.',
+      description: 'Update operator profile: set your email (sends a verification link) and/or display name. REQUIRES OPERATOR KEY.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -483,7 +483,7 @@ export const TOOL_DEFINITIONS = [
     },
     {
       name: 'claim_promo',
-      description: 'Claim the free-sats install promo (100 sats, first 100 installs). Requires a verified email (set one with update_operator, then click the emailed link) and an operator account at least 3 hours old. REQUIRES OPERATOR KEY.',
+      description: 'The 100-sat launch install promo has ended. This tool is kept for backward compatibility and reports the promo status; it no longer funds new wallets. REQUIRES OPERATOR KEY.',
       inputSchema: {
         type: 'object',
         properties: {
