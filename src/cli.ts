@@ -100,10 +100,37 @@ function parseArgs(argv: string[]): { command: string; positional: string[]; fla
 
 // --- Commands ---
 
+const RATE_LIMIT_RE = /rate limit/i;
+
 async function cmdRegister(positional: string[], flags: Record<string, string | boolean>): Promise<unknown> {
   const name = (flags.name as string) || positional[0] || undefined;
   const email = (flags.email as string) || undefined;
-  const result = await registerOperator(name, email);
+  const force = flags.force !== undefined && flags.force !== 'false';
+  const saved = activeStoredKey(loadCredentials());
+  if (saved && !force) {
+    // Never call the API when a wallet is already saved: registration is rate limited
+    // per IP and a second account would orphan the funded one.
+    return {
+      already_registered: true,
+      using: `saved ${saved.type} credentials`,
+      credentials_file: credentialsPath(),
+      message: `Already registered. Using the saved ${saved.type} credentials in ${credentialsPath()}. Nothing was changed.`,
+      next_step: 'Run: lw whoami   (or lw balance). To fund the wallet run: lw deposit <sats>',
+      force_hint: 'To create a brand new wallet anyway (this replaces the saved credentials), run: lw register --force',
+    };
+  }
+  let result;
+  try {
+    result = await registerOperator(name, email);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (RATE_LIMIT_RE.test(message)) {
+      throw new Error(
+        `${message} You may already have a wallet: reuse your saved credentials (${credentialsPath()}) instead of registering again. Run: lw credentials   or   lw whoami`,
+      );
+    }
+    throw err;
+  }
   const savedTo = saveOperatorKey(result.apiKey, { id: result.operatorId, name, recovery_code: result.recoveryCode });
   return {
     operator_id: result.operatorId,
@@ -113,9 +140,8 @@ async function cmdRegister(positional: string[], flags: Record<string, string | 
     hint: savedTo
       ? `Credentials saved to ${savedTo}. lw commands will use them automatically; no export needed.`
       : `export LIGHTNING_WALLET_API_KEY=${result.apiKey}`,
-    next_step: email
-      ? 'Click the verification link we emailed you. Verified operators get 100 free sats credited automatically a few hours later.'
-      : 'Run: lw set-email you@example.com   to get 100 free sats after verification.',
+    next_step: 'Registering is free. Your first paid call needs a small deposit: run   lw deposit <sats>   and pay the invoice from any Lightning wallet.' +
+      (email ? ' Click the verification link we emailed you.' : ' An email is optional; add one for notifications with: lw set-email you@example.com'),
     webhook_tip: 'Set up a webhook to get real-time notifications for payments and balance changes. Run: lw help webhooks',
   };
 }
@@ -394,8 +420,9 @@ USAGE
   lw <command> [options]
 
 SETUP
-  register [--name "name"] [--email "you@example.com"]
-                                 Create operator account. Credentials are saved to
+  register [--name "name"] [--email "you@example.com"] [--force]
+                                 Create operator account (free; email is optional, for notifications).
+                                 If credentials are already saved, nothing is changed; --force makes a new one. Credentials are saved to
                                  ~/.lightning-wallet/credentials.json and reused automatically.
   use-key <api_key> [--agent]     Save an existing key instead (env LIGHTNING_WALLET_API_KEY wins if set)
   credentials                     Show which saved credentials are active (never prints keys)
@@ -425,8 +452,7 @@ COMMANDS
 
   transactions                    Recent transactions [--limit 10] [--offset 0]
   set-email <email>               Set operator email (verification link emailed)
-  claim-promo                     Claim the 100-sat install promo
-                                    (requires verified email + 3h account age)
+  claim-promo                     Show install promo status (the launch promo has ended)
   help                            Show this help
 
 WEBHOOKS
@@ -453,8 +479,11 @@ OUTPUT
   --human                         Human-readable output
 
 EXAMPLES
-  # Register once; the key is saved locally and reused
-  lw register --name "My Bot" --email you@example.com
+  # Register once (free); the key is saved locally and reused. --email is optional.
+  lw register --name "My Bot"
+
+  # Fund the wallet before the first paid call
+  lw deposit 500
 
   # Check balance
   lw balance | jq '.balance_sats'
