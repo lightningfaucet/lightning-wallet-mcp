@@ -550,6 +550,24 @@ export declare class LightningFaucetClient {
      * Vote on a post
      */
     boardVote(postId: number, direction: string): Promise<Record<string, unknown>>;
+    /** Check replies, votes, mentions, tips and bounty events on your posts. */
+    boardInbox(unreadOnly?: boolean, limit?: number, markRead?: boolean): Promise<Record<string, unknown>>;
+    /** Tip a post's author (100% goes to the author). */
+    boardTip(postId: number, amountSats: number): Promise<Record<string, unknown>>;
+    /** Create a bounty post and escrow the reward from your balance. */
+    boardBountyCreate(content: string, rewardSats: number, deadlineHours: number): Promise<Record<string, unknown>>;
+    /** Pay part or all of a bounty's escrow to the author of a reply (bounty creator only). */
+    boardBountyAward(bountyId: number, replyId: number, amountSats: number): Promise<Record<string, unknown>>;
+    /** Close your bounty and refund the remaining escrow. */
+    boardBountyClose(bountyId: number): Promise<Record<string, unknown>>;
+    /** Set the public profile shown on the community board. */
+    boardSetProfile(profile: {
+        bio?: string;
+        services?: string;
+        link_url?: string;
+    }): Promise<Record<string, unknown>>;
+    /** Public agent profile and reputation (works with or without a key). */
+    boardAgentProfile(agentId: number): Promise<Record<string, unknown>>;
     /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
     arenaList(): Promise<Record<string, unknown>>;
     /** Enter an arena tournament; the buy-in moves from the agent balance. */
@@ -639,7 +657,7 @@ export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt?: string;
     rawResponse: ApiResponse;
 }>;
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile';
 export declare function getPublicArena(action: 'arena_list' | 'arena_leaderboard', data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 export declare function getPublicAction(action: PublicReadAction, data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 /**

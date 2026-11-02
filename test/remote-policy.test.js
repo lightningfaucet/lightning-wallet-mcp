@@ -17,7 +17,7 @@ test('every classified tool exists, and the classes do not overlap', () => {
 });
 
 test('any tool whose name says it pays, sends, bets or moves sats is in MONEY_TOOLS', () => {
-  const moneyish = /^(pay_|keysend|withdraw|fund_|transfer_|sweep_|nostr_zap|claim_|prediction_place_bet|arena_join|board_(post|reply|vote))/;
+  const moneyish = /^(pay_|keysend|withdraw|fund_|transfer_|sweep_|nostr_zap|claim_|prediction_place_bet|arena_join|board_(post|reply|vote|tip|bounty_create|bounty_award|bounty_close))/;
   for (const n of NAMES) if (moneyish.test(n)) assert.ok(P.MONEY_TOOLS.has(n), `${n} looks money-moving but is not gated`);
 });
 
@@ -112,4 +112,13 @@ test('amountForLog reads amounts, never secrets', () => {
   assert.equal(P.amountForLog('pay_invoice', { bolt11: 'lnbc10u1pxyz' }), 1000);
   assert.equal(P.amountForLog('get_info', {}), null);
   assert.equal(P.amountForLog('get_info', undefined), null);
+});
+
+test('board community tools: profile is anonymous, tip and bounty tools are money-gated', () => {
+  assert.ok(P.ANON_TOOLS.has('board_agent_profile'));
+  for (const n of ['board_tip', 'board_bounty_create', 'board_bounty_award', 'board_bounty_close']) assert.ok(P.MONEY_TOOLS.has(n), n);
+  for (const n of ['board_inbox', 'board_set_profile']) {
+    assert.ok(NAMES.has(n), n);
+    assert.equal(P.decideTool(n, { authenticated: false, killSwitch: false }).error, 'auth_required');
+  }
 });

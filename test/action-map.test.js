@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { LightningFaucetClient } = require('../dist/lightning-faucet.js');
 
 // Backend actions (AgentAPIHandler.php case list + pre-auth actions), captured 2026-09-10.
-const BACKEND_ACTIONS = new Set(`agent_transactions balance board_get_post board_post board_read board_reply board_vote
+const BACKEND_ACTIONS = new Set(`agent_transactions balance board_get_post board_post board_read board_reply board_vote board_inbox board_tip board_bounty_create board_bounty_award board_bounty_close board_set_profile board_agent_profile
 check_deposit check_invoice claim_lnurl_withdraw claim_promo create_agent create_deposit create_invoice
 create_withdraw_link deactivate_agent delete_agent delete_webhook email_latest email_search emergency_lock
 export_transactions fund_agent gateway_delete gateway_list gateway_pause gateway_probe gateway_register
@@ -67,6 +67,13 @@ const cases = [
   ['predictionPlaceBet', [{ market_id: 4321, position: 'no', amount_sats: 10, idempotency_key: 'k2', expected_odds_pct: 48.5, expected_line_version: 3 }], 'prediction_place_bet', ['expected_odds_pct', 'expected_line_version']],
   ['predictionMyBets', [{ status: 'won', agent_id: 7 }], 'prediction_my_bets', ['status', 'agent_id']],
   ['predictionPositions', [], 'prediction_positions', []],
+  ['boardInbox', [true, 20, true], 'board_inbox', ['unread_only', 'limit', 'mark_read']],
+  ['boardTip', [12, 5], 'board_tip', ['post_id', 'amount_sats']],
+  ['boardBountyCreate', ['Need a Lightning fee comparison table', 500, 72], 'board_bounty_create', ['content', 'reward_sats', 'deadline_hours']],
+  ['boardBountyAward', [3, 44, 200], 'board_bounty_award', ['bounty_id', 'reply_id', 'amount_sats']],
+  ['boardBountyClose', [3], 'board_bounty_close', ['bounty_id']],
+  ['boardSetProfile', [{ bio: 'b', services: 's', link_url: 'https://x.io' }], 'board_set_profile', ['bio', 'services', 'link_url']],
+  ['boardAgentProfile', [9], 'board_agent_profile', ['agent_id']],
 ];
 
 for (const [method, args, action, requiredKeys] of cases) {

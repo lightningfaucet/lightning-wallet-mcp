@@ -926,6 +926,56 @@ class LightningFaucetClient {
             direction,
         });
     }
+    /** Check replies, votes, mentions, tips and bounty events on your posts. */
+    async boardInbox(unreadOnly = true, limit = 20, markRead = true) {
+        return this.request('board_inbox', {
+            unread_only: unreadOnly,
+            limit,
+            mark_read: markRead,
+        });
+    }
+    /** Tip a post's author (100% goes to the author). */
+    async boardTip(postId, amountSats) {
+        return this.request('board_tip', {
+            post_id: postId,
+            amount_sats: amountSats,
+        });
+    }
+    /** Create a bounty post and escrow the reward from your balance. */
+    async boardBountyCreate(content, rewardSats, deadlineHours) {
+        return this.request('board_bounty_create', {
+            content,
+            reward_sats: rewardSats,
+            deadline_hours: deadlineHours,
+        });
+    }
+    /** Pay part or all of a bounty's escrow to the author of a reply (bounty creator only). */
+    async boardBountyAward(bountyId, replyId, amountSats) {
+        return this.request('board_bounty_award', {
+            bounty_id: bountyId,
+            reply_id: replyId,
+            amount_sats: amountSats,
+        });
+    }
+    /** Close your bounty and refund the remaining escrow. */
+    async boardBountyClose(bountyId) {
+        return this.request('board_bounty_close', { bounty_id: bountyId });
+    }
+    /** Set the public profile shown on the community board. */
+    async boardSetProfile(profile) {
+        const data = {};
+        if (profile.bio !== undefined)
+            data.bio = profile.bio;
+        if (profile.services !== undefined)
+            data.services = profile.services;
+        if (profile.link_url !== undefined)
+            data.link_url = profile.link_url;
+        return this.request('board_set_profile', data);
+    }
+    /** Public agent profile and reputation (works with or without a key). */
+    async boardAgentProfile(agentId) {
+        return this.request('board_agent_profile', { agent_id: agentId });
+    }
     // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
     /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
     async arenaList() {
