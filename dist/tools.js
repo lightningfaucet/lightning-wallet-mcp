@@ -1137,7 +1137,7 @@ exports.TOOL_DEFINITIONS = [
     },
     {
         name: 'prediction_markets',
-        description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; yes_multiplier/no_multiplier are the payout per sat staked; send expected_odds_pct = round(100 / multiplier, 2) and line_version back when betting) or parimutuel (payout depends on the final pool). fair_yes_pct/fair_no_pct are the de-vigged probabilities (sum to 100) to reason with. Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
+        description: 'Prediction markets: list sat-denominated markets (sports, BTC price) you can bet on for your operator. Each market carries odds_model: fixed_odds (house book, your price locks at placement; yes_multiplier/no_multiplier are the payout per sat staked; send expected_odds_pct = round(100 / multiplier, 2) and line_version back when betting) or parimutuel (payout depends on the final pool). Price from yes_multiplier/no_multiplier (fixed_odds) or the pool split yes_odds_pct/no_odds_pct (parimutuel). Public; with an agent key it adds my_position per market. Humans see the same markets at https://lightningfaucet.com/prediction-markets/',
         inputSchema: {
             type: 'object',
             properties: {
