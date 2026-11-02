@@ -76,7 +76,7 @@ lw pay-address someone@getalby.com 100
 
 - **Credentials persist.** `register_operator`, `set_operator_key`, `set_agent_credentials`, `recover_account` and `rotate_api_key` save to `~/.lightning-wallet/credentials.json`; the server loads it on start when `LIGHTNING_WALLET_API_KEY` is unset. `forget_credentials` (tool) and `lw forget` delete it. `LIGHTNING_WALLET_NO_PERSIST=1` disables writes.
 - **Pay straight from the operator key.** `pay_invoice`, `pay_l402_api`, `pay_lightning_address` and `keysend` no longer require an agent key. The backend provisions a transient default agent, funds it with exactly what the payment needs, and sweeps the remainder back, so your operator balance is your balance. Agents are now optional: create them when you want separate budgets.
-- **Cheaper.** Platform fee is 1% rounded down with no minimum (payments under 100 sats are free). Withdrawals start at 10 sats. The default routing reserve scales with the amount instead of a flat 100 sats.
+- **Cheaper.** Platform fee is 1% rounded down with a 1 sat minimum. Withdrawals start at 10 sats. The default routing reserve scales with the amount instead of a flat 100 sats.
 - **Safer payments.** In-flight payments are returned as `pending: true` (not as errors), so the model does not retry a payment that may still settle. Requests time out after 45s instead of hanging. Lightning-address payments verify the invoice amount before paying.
 - **Fixes.** `set_budget` uses the backend's `set_budget` action (0 = unlimited works). Partial `sweep_agent` no longer sweeps everything. Fee fields for `pay_lightning_address` and `nostr_zap` report the real routing and platform fees. BOLT11 inputs accept `lightning:` prefixes, whitespace, uppercase and signet/regtest invoices. `whoami` never guesses the identity type.
 - **CLI.** New `pay-address`, `keysend`, `sweep`, `set-budget`, `recover`, `use-key`, `credentials`, `forget`. Version is read from the package.
@@ -214,7 +214,7 @@ Every command prints JSON to stdout (add `--human` for a readable view). Errors 
 
 ## Pricing
 
-- Platform fee: **1% of the amount, rounded down, no minimum** (payments under 100 sats pay no fee) on payments (`pay_invoice`, `pay_lightning_address`, `keysend`, `nostr_zap`) and on paid-API pay-through (`pay_l402_api`). Never more than 1%. `get_info` returns the live schedule as `platform_fees`.
+- Platform fee: **1% of the amount, rounded down, minimum 1 sat** on payments (`pay_invoice`, `pay_lightning_address`, `keysend`, `nostr_zap`) and on paid-API pay-through (`pay_l402_api`). Never more than 1%. `get_info` returns the live schedule as `platform_fees`.
 - Routing fees: charged at cost. An estimate is reserved up front (1% of the amount, at least 3 sats, at most 100) and the unused part is refunded after settlement. Pass `max_fee_sats` to override.
 - Deposits, receiving, operator-to-agent and same-operator agent transfers, and webhooks: free. A payment to another operator's agent pays the 1% payment fee.
 - Withdrawals to your own wallet (`withdraw`, `create_withdraw_link`): **no platform fee**, routing at cost, minimum 10 sats.
