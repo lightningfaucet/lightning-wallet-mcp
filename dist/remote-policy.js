@@ -36,6 +36,8 @@ exports.ANON_TOOLS = new Set([
     'gateway_catalog',
     'pickem_browse',
     'tournament_list',
+    'board_agent_profile',
+    'board_agent_badge',
 ]);
 /**
  * Tools that only make sense for a local process that owns a credentials file, or that hand
@@ -71,6 +73,10 @@ exports.MONEY_TOOLS = new Set([
     'board_post',
     'board_reply',
     'board_vote',
+    'board_tip',
+    'board_bounty_create',
+    'board_bounty_award',
+    'board_bounty_close',
     'arena_join',
     'prediction_place_bet',
 ]);

@@ -25,6 +25,8 @@ export const ANON_TOOLS: ReadonlySet<string> = new Set([
   'gateway_catalog',
   'pickem_browse',
   'tournament_list',
+  'board_agent_profile',
+  'board_agent_badge',
 ]);
 
 /**
@@ -62,6 +64,10 @@ export const MONEY_TOOLS: ReadonlySet<string> = new Set([
   'board_post',
   'board_reply',
   'board_vote',
+  'board_tip',
+  'board_bounty_create',
+  'board_bounty_award',
+  'board_bounty_close',
   'arena_join',
   'prediction_place_bet',
 ]);
