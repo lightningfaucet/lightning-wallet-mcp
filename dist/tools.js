@@ -257,6 +257,16 @@ const BoardSetProfileSchema = zod_1.z.object({
 const BoardAgentBadgeSchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().describe('Agent id'),
 });
+const MarketsBrowseSchema = zod_1.z.object({
+    market_type: zod_1.z.enum(['sports', 'btc_price']).optional(),
+    category: zod_1.z.string().max(64).optional(),
+    limit: zod_1.z.number().int().min(1).max(100).optional(),
+    offset: zod_1.z.number().int().min(0).optional(),
+});
+const LinkAccountSchema = zod_1.z.object({
+    link_code: zod_1.z.string().min(8).max(40).describe('One-time link code from lightningfaucet.com (XXXX-XXXX-XXXX-XXXX)'),
+    merge_balance: zod_1.z.boolean().optional(),
+});
 const BoardAgentProfileSchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().describe('Agent id (the agent_id shown on board posts)'),
 });
@@ -999,6 +1009,36 @@ exports.TOOL_DEFINITIONS = [
             },
             required: [],
         },
+    },
+    {
+        name: 'markets_browse',
+        description: 'Open prediction markets with the offered price only. Fixed-odds markets show yes_multiplier and no_multiplier (payout per sat staked; the bettable price is 100 / multiplier), pari-mutuel markets show the pool split. Public, no key required. The same list is a cached JSON feed at https://lightningfaucet.com/api/markets/open.json.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                market_type: { type: 'string', enum: ['sports', 'btc_price'] },
+                category: { type: 'string', description: 'League or category key, e.g. nfl, nba, epl' },
+                limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
+                offset: { type: 'integer', minimum: 0 },
+            },
+        },
+    },
+    {
+        name: 'link_account',
+        description: 'Link this operator to your Lightning Faucet account. Log in on lightningfaucet.com with a verified email, create an agent link code on your profile page, then pass it here. The code works once and expires in 15 minutes. Any operator balance is merged into the account balance unless merge_balance is false. Operator key required.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                link_code: { type: 'string', description: 'One-time link code, XXXX-XXXX-XXXX-XXXX' },
+                merge_balance: { type: 'boolean', description: 'Default true' },
+            },
+            required: ['link_code'],
+        },
+    },
+    {
+        name: 'get_earn_status',
+        description: 'Status of the linked Lightning Faucet account: cash balance (bonus funds excluded), deposited and withdrawn totals, daily streak and an earn summary by source. Needs an operator key linked with link_account; unlinked keys get account_not_linked.',
+        inputSchema: { type: 'object', properties: {} },
     },
     {
         name: 'board_agent_profile',
@@ -2191,6 +2231,22 @@ async function callTool(name, args, ctx) {
                 return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
             }
             // ─── Prediction markets ───────────────────────────────────────────
+            case 'markets_browse': {
+                const parsed = MarketsBrowseSchema.parse(args ?? {});
+                const filters = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== undefined));
+                const c = session.getClient();
+                const result = c ? await c.marketsBrowse(filters) : await (0, lightning_faucet_js_1.getPublicAction)('markets_browse', filters);
+                return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
+            case 'link_account': {
+                const parsed = LinkAccountSchema.parse(args ?? {});
+                const result = await session.requireClient().linkAccount(parsed.link_code, parsed.merge_balance);
+                return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
+            case 'get_earn_status': {
+                const result = await session.requireClient().getEarnStatus();
+                return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
             case 'prediction_markets': {
                 const parsed = PredictionMarketsSchema.parse(args ?? {});
                 const filters = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== undefined));

@@ -20,6 +20,7 @@ export const ANON_TOOLS: ReadonlySet<string> = new Set([
   'verify_fair',
   'prediction_markets',
   'prediction_market',
+  'markets_browse',
   'arena_list',
   'arena_leaderboard',
   'gateway_catalog',
