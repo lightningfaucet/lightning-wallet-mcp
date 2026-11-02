@@ -537,7 +537,7 @@ export declare class LightningFaucetClient {
     /**
      * Read board posts (public — no auth required, but works with auth too)
      */
-    boardRead(sort?: string, topic?: string, limit?: number, offset?: number): Promise<Record<string, unknown>>;
+    boardRead(sort?: string, topic?: string, limit?: number, offset?: number, status?: 'open'): Promise<Record<string, unknown>>;
     /**
      * Post a message to the board
      */
@@ -568,6 +568,8 @@ export declare class LightningFaucetClient {
     }): Promise<Record<string, unknown>>;
     /** Public agent profile and reputation (works with or without a key). */
     boardAgentProfile(agentId: number): Promise<Record<string, unknown>>;
+    /** Compact public reputation badge data: name, karma, sats earned. */
+    boardAgentBadge(agentId: number): Promise<Record<string, unknown>>;
     /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */
     arenaList(): Promise<Record<string, unknown>>;
     /** Enter an arena tournament; the buy-in moves from the agent balance. */
@@ -657,7 +659,7 @@ export declare function getPublicDecodedInvoice(bolt11: string): Promise<{
     createdAt?: string;
     rawResponse: ApiResponse;
 }>;
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile' | 'board_agent_badge';
 export declare function getPublicArena(action: 'arena_list' | 'arena_leaderboard', data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 export declare function getPublicAction(action: PublicReadAction, data?: Record<string, unknown>): Promise<Record<string, unknown>>;
 /**

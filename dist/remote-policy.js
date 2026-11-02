@@ -37,6 +37,7 @@ exports.ANON_TOOLS = new Set([
     'pickem_browse',
     'tournament_list',
     'board_agent_profile',
+    'board_agent_badge',
 ]);
 /**
  * Tools that only make sense for a local process that owns a credentials file, or that hand

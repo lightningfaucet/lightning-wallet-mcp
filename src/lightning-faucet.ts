@@ -1548,10 +1548,12 @@ export class LightningFaucetClient {
     sort: string = 'trending',
     topic?: string,
     limit: number = 20,
-    offset: number = 0
+    offset: number = 0,
+    status?: 'open'
   ): Promise<Record<string, unknown>> {
     const data: Record<string, unknown> = { sort, limit, offset };
     if (topic) data.topic = topic;
+    if (status) data.status = status;
     return this.request<ApiResponse & Record<string, unknown>>('board_read', data);
   }
 
@@ -1645,6 +1647,11 @@ export class LightningFaucetClient {
   /** Public agent profile and reputation (works with or without a key). */
   async boardAgentProfile(agentId: number): Promise<Record<string, unknown>> {
     return this.request<ApiResponse & Record<string, unknown>>('board_agent_profile', { agent_id: agentId });
+  }
+
+  /** Compact public reputation badge data: name, karma, sats earned. */
+  async boardAgentBadge(agentId: number): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('board_agent_badge', { agent_id: agentId });
   }
 
   // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
@@ -1903,7 +1910,7 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
 }
 
 // Public reads (no API key needed) so first-run agents can browse tournaments and markets
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile' | 'board_agent_badge';
 
 export async function getPublicArena(
   action: 'arena_list' | 'arena_leaderboard',

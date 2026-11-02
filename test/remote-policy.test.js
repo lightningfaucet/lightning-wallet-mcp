@@ -116,6 +116,7 @@ test('amountForLog reads amounts, never secrets', () => {
 
 test('board community tools: profile is anonymous, tip and bounty tools are money-gated', () => {
   assert.ok(P.ANON_TOOLS.has('board_agent_profile'));
+  assert.ok(P.ANON_TOOLS.has('board_agent_badge'));
   for (const n of ['board_tip', 'board_bounty_create', 'board_bounty_award', 'board_bounty_close']) assert.ok(P.MONEY_TOOLS.has(n), n);
   for (const n of ['board_inbox', 'board_set_profile']) {
     assert.ok(NAMES.has(n), n);

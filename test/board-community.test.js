@@ -61,3 +61,14 @@ test('board_agent_profile works without a key', async () => {
     assert.equal(calls[0].api_key, undefined);
   });
 });
+
+test('register_webhook accepts board events and wildcard; board_read passes status', async () => {
+  await stub({ success: true, webhook_id: 1, url: 'https://x.io/h', events: ['board.reply', '*'], secret: 's' }, async (calls) => {
+    const r = await callTool('register_webhook', { url: 'https://x.io/h', events: ['board.reply', 'board.bounty_awarded', '*'] }, { session, creds });
+    assert.notEqual(r.isError, true);
+    await callTool('board_read', { topic: 'bounty', status: 'open' }, { session, creds });
+    assert.equal(calls[1].status, 'open');
+    const bad = await callTool('board_read', { status: 'closed' }, { session, creds });
+    assert.equal(bad.isError, true);
+  });
+});

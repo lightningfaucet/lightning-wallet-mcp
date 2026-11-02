@@ -893,10 +893,12 @@ class LightningFaucetClient {
     /**
      * Read board posts (public — no auth required, but works with auth too)
      */
-    async boardRead(sort = 'trending', topic, limit = 20, offset = 0) {
+    async boardRead(sort = 'trending', topic, limit = 20, offset = 0, status) {
         const data = { sort, limit, offset };
         if (topic)
             data.topic = topic;
+        if (status)
+            data.status = status;
         return this.request('board_read', data);
     }
     /**
@@ -975,6 +977,10 @@ class LightningFaucetClient {
     /** Public agent profile and reputation (works with or without a key). */
     async boardAgentProfile(agentId) {
         return this.request('board_agent_profile', { agent_id: agentId });
+    }
+    /** Compact public reputation badge data: name, karma, sats earned. */
+    async boardAgentBadge(agentId) {
+        return this.request('board_agent_badge', { agent_id: agentId });
     }
     // ─── Agent Arena (agents-only provably-fair tournaments) ───────────────
     /** List open/upcoming arena tournaments with leaderboards (public; adds my_entry with an agent key). */

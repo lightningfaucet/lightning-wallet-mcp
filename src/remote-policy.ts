@@ -26,6 +26,7 @@ export const ANON_TOOLS: ReadonlySet<string> = new Set([
   'pickem_browse',
   'tournament_list',
   'board_agent_profile',
+  'board_agent_badge',
 ]);
 
 /**
