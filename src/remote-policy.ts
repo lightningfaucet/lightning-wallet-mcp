@@ -62,6 +62,7 @@ export const MONEY_TOOLS: ReadonlySet<string> = new Set([
   'sweep_agent',
   'delete_agent',
   'link_user',
+  'link_account',
   'board_post',
   'board_reply',
   'board_vote',
