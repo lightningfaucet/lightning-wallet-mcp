@@ -31,6 +31,7 @@ exports.ANON_TOOLS = new Set([
     'verify_fair',
     'prediction_markets',
     'prediction_market',
+    'markets_browse',
     'arena_list',
     'arena_leaderboard',
     'gateway_catalog',

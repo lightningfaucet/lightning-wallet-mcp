@@ -1705,6 +1705,25 @@ export class LightningFaucetClient {
     return this.request<ApiResponse & Record<string, unknown>>('prediction_markets', data);
   }
 
+  /**
+   * Open markets with offered prices only (public; a key is optional and ignored).
+   * Fixed-odds markets price by yes_multiplier/no_multiplier, pari-mutuel ones by the pool split.
+   */
+  async marketsBrowse(filters: { market_type?: string; category?: string; limit?: number; offset?: number } = {}): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(filters)) if (v !== undefined) data[k] = v;
+    return this.request<ApiResponse & Record<string, unknown>>('markets_browse', data);
+  }
+  /** Link this operator to a Lightning Faucet account with a one-time code minted on the site. */
+  async linkAccount(linkCode: string, mergeBalance?: boolean): Promise<Record<string, unknown>> {
+    const data: Record<string, unknown> = { link_code: linkCode };
+    if (mergeBalance !== undefined) data.merge_balance = mergeBalance;
+    return this.request<ApiResponse & Record<string, unknown>>('link_account', data);
+  }
+  /** Linked account status: cash balance, streak and earn summary (linked operators only). */
+  async getEarnStatus(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('get_earn_status');
+  }
   /** One market in full. */
   async predictionMarket(marketId: number): Promise<Record<string, unknown>> {
     return this.request<ApiResponse & Record<string, unknown>>('prediction_market', { market_id: marketId });
@@ -1910,7 +1929,7 @@ export async function getPublicDecodedInvoice(bolt11: string): Promise<{
 }
 
 // Public reads (no API key needed) so first-run agents can browse tournaments and markets
-export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile' | 'board_agent_badge';
+export type PublicReadAction = 'arena_list' | 'arena_leaderboard' | 'prediction_markets' | 'markets_browse' | 'prediction_market' | 'gateway_catalog' | 'registry_list' | 'get_l402_discovered' | 'board_agent_profile' | 'board_agent_badge';
 
 export async function getPublicArena(
   action: 'arena_list' | 'arena_leaderboard',
