@@ -402,7 +402,7 @@ const PredictionPlaceBetSchema = z.object({
 const ACCOUNT_ACTION_REFUSALS = new Set([
   'account_not_linked', 'account_not_verified', 'account_not_eligible', 'account_locked', 'payments_cooldown',
   'feature_disabled', 'tool_disabled', 'owner_cap_per_bet', 'owner_cap_per_day', 'insufficient_balance',
-  'missing_idempotency_key', 'invalid_idempotency_key', 'idempotency_key_reused', 'bet_in_progress',
+  'missing_idempotency_key', 'invalid_idempotency_key', 'idempotency_key_reused', 'bet_in_progress', 'roll_refunded',
   'odds_changed', 'price_required', 'market_not_supported', 'market_closed', 'market_not_found',
   'pool_limit_reached', 'position_cap_exceeded', 'market_limit_reached', 'odds_unavailable', 'market_unavailable',
   'user_market_cap', 'user_daily_exposure_cap', 'min_bet_not_met', 'max_bet_exceeded', 'invalid_amount',
