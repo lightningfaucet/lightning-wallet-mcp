@@ -2343,8 +2343,8 @@ async function callTool(name, args, ctx) {
             case 'play_dice': {
                 // The caller owns the idempotency key; none is ever generated here (see prediction_place_bet).
                 const parsed = name === 'place_bet' ? PlaceBetSchema.parse(args ?? {}) : PlayDiceSchema.parse(args ?? {});
+                const client = session.requireClient();
                 try {
-                    const client = session.requireClient();
                     const result = name === 'place_bet'
                         ? await client.placeBet(parsed)
                         : await client.playDice(parsed);
@@ -2355,6 +2355,17 @@ async function callTool(name, args, ctx) {
                     if (e instanceof lightning_faucet_js_1.ApiError && ACCOUNT_ACTION_REFUSALS.has(String(e.response.error ?? ''))) {
                         const refusal = { ...e.response, idempotency_key: parsed.idempotency_key, next: accountActionNextHint(String(e.response.error)) };
                         return { content: [{ type: 'text', text: JSON.stringify(refusal, null, 2) }] };
+                    }
+                    // Unknown outcome (timeout, network): the stake may already be spent. Surface the key so the retry is a replay.
+                    if (!(e instanceof lightning_faucet_js_1.ApiError)) {
+                        const uncertain = {
+                            success: false,
+                            error: 'uncertain_outcome',
+                            message: e instanceof Error ? e.message : String(e),
+                            idempotency_key: parsed.idempotency_key,
+                            next: `The ${name === 'place_bet' ? 'bet' : 'roll'} may or may not have been placed. Retry ${name} with the SAME arguments and the SAME idempotency_key: the backend replays it if it landed and places it if it did not. Do NOT change the arguments or the key, which would create a new ${name === 'place_bet' ? 'bet' : 'roll'}.`,
+                        };
+                        return { content: [{ type: 'text', text: JSON.stringify(uncertain, null, 2) }] };
                     }
                     throw e;
                 }
