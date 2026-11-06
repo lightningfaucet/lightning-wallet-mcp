@@ -1724,6 +1724,46 @@ export class LightningFaucetClient {
   async getEarnStatus(): Promise<Record<string, unknown>> {
     return this.request<ApiResponse & Record<string, unknown>>('get_earn_status');
   }
+  /**
+   * Bet on a fixed-odds prediction market with the LINKED account's deposited sats (operator key,
+   * after link_account). Same rules as the website; the owner's per-bet and per-day limits apply.
+   * Refusals come back as ApiError with the structured reply in .response.
+   */
+  async placeBet(p: {
+    market_id: number;
+    position: 'yes' | 'no';
+    amount_sats: number;
+    expected_odds_pct: number;
+    expected_line_version: number;
+    idempotency_key: string;
+  }): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('place_bet', {
+      market_id: p.market_id,
+      position: p.position,
+      amount_sats: p.amount_sats,
+      expected_odds_pct: p.expected_odds_pct,
+      expected_line_version: p.expected_line_version,
+      idempotency_key: p.idempotency_key,
+    });
+  }
+  /** Roll provably fair dice with the LINKED account's deposited sats (operator key, after link_account). */
+  async playDice(p: {
+    wager_sats: number;
+    target: number;
+    direction: 'over' | 'under';
+    idempotency_key: string;
+  }): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('play_dice', {
+      wager_sats: p.wager_sats,
+      target: p.target,
+      direction: p.direction,
+      idempotency_key: p.idempotency_key,
+    });
+  }
+  /** The per-tool limits the account owner set for place_bet and play_dice, and what is left today. */
+  async getAgentLimits(): Promise<Record<string, unknown>> {
+    return this.request<ApiResponse & Record<string, unknown>>('get_agent_limits');
+  }
   /** One market in full. */
   async predictionMarket(marketId: number): Promise<Record<string, unknown>> {
     return this.request<ApiResponse & Record<string, unknown>>('prediction_market', { market_id: marketId });

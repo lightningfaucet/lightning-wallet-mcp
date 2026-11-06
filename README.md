@@ -267,6 +267,9 @@ Payments always execute through an agent wallet on the backend, which is where b
 
 ## Changelog
 
+### v1.14.0 (2026-11-05)
+Agent-operable account, step 2: three tools for an operator linked to a Lightning Faucet account (`link_account`). `place_bet` bets on a fixed-odds prediction market and `play_dice` rolls provably fair dice, both with the linked account's REAL deposited sats (never bonus sats; agent play earns no promos, rebates or race and leaderboard prizes). Bets are placed at the offered price you pass in (`expected_odds_pct`, `expected_line_version` from `markets_browse`). Every call needs an `idempotency_key`; a retry returns the original result and never plays twice. The account owner sets per-bet and per-day limits on lightningfaucet.com, and `get_agent_limits` reads them.
+
 ### v1.13.1 (2026-11-02)
 Prediction market tool description and README now describe offered prices only (`yes_multiplier` / `no_multiplier` on fixed-odds markets, the pool split on parimutuel markets). The `fair_yes_pct` / `fair_no_pct` fields are gone from the API.
 ### v1.12.0 (2026-11-01)

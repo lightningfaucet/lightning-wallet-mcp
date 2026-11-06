@@ -267,6 +267,20 @@ const LinkAccountSchema = zod_1.z.object({
     link_code: zod_1.z.string().min(8).max(40).describe('One-time link code from lightningfaucet.com (XXXX-XXXX-XXXX-XXXX)'),
     merge_balance: zod_1.z.boolean().optional(),
 });
+const PlaceBetSchema = zod_1.z.object({
+    market_id: zod_1.z.number().int().positive().describe('Market id from markets_browse (fixed_odds markets only)'),
+    position: zod_1.z.enum(['yes', 'no']).describe('Side to back'),
+    amount_sats: zod_1.z.number().int().positive().describe('Stake in sats, taken from the linked account\'s deposited balance'),
+    expected_odds_pct: zod_1.z.number().gt(0).lt(100).describe('The price you accept for your side: round(100 / yes_multiplier, 2) or round(100 / no_multiplier, 2) from markets_browse'),
+    expected_line_version: zod_1.z.number().int().min(0).describe('The line_version you saw in markets_browse'),
+    idempotency_key: zod_1.z.string().min(1).max(100).regex(/^[A-Za-z0-9_.:-]+$/).describe('Required. A unique string per bet (a UUID is fine). Reuse the SAME key when retrying'),
+});
+const PlayDiceSchema = zod_1.z.object({
+    wager_sats: zod_1.z.number().int().positive().describe('Wager in sats from the linked account\'s deposited balance'),
+    target: zod_1.z.number().int().min(1).max(9998).describe('Roll target on the 0.00-99.99 scale in hundredths, 1 to 9998 (5000 = 50.00)'),
+    direction: zod_1.z.enum(['over', 'under']).describe('Win when the roll is over or under the target'),
+    idempotency_key: zod_1.z.string().min(1).max(100).regex(/^[A-Za-z0-9_.:-]+$/).describe('Required. A unique string per roll. Reuse the SAME key when retrying'),
+});
 const BoardAgentProfileSchema = zod_1.z.object({
     agent_id: zod_1.z.number().int().positive().describe('Agent id (the agent_id shown on board posts)'),
 });
@@ -308,6 +322,45 @@ const PredictionPlaceBetSchema = zod_1.z.object({
     expected_line_version: zod_1.z.number().int().min(0).optional().describe('fixed_odds markets: the line_version you saw. Refused with odds_changed if the proposition was re-lined'),
     idempotency_key: zod_1.z.string().min(1).max(128).describe('Required. A unique string per bet (a UUID is fine). Reuse the SAME key when retrying the same bet after a timeout or odds_changed, and the backend returns that bet instead of placing a second one'),
 }).refine((p) => (p.expected_odds_pct === undefined) === (p.expected_line_version === undefined), { message: 'expected_odds_pct and expected_line_version must be passed together (both or neither)', path: ['expected_line_version'] });
+/** place_bet / play_dice refusals: structured replies the model acts on (not thrown). */
+const ACCOUNT_ACTION_REFUSALS = new Set([
+    'account_not_linked', 'account_not_verified', 'account_not_eligible', 'account_locked', 'payments_cooldown',
+    'feature_disabled', 'tool_disabled', 'owner_cap_per_bet', 'owner_cap_per_day', 'insufficient_balance',
+    'missing_idempotency_key', 'invalid_idempotency_key', 'idempotency_key_reused', 'bet_in_progress', 'roll_refunded',
+    'odds_changed', 'price_required', 'market_not_supported', 'market_closed', 'market_not_found',
+    'pool_limit_reached', 'position_cap_exceeded', 'market_limit_reached', 'odds_unavailable', 'market_unavailable',
+    'user_market_cap', 'user_daily_exposure_cap', 'min_bet_not_met', 'max_bet_exceeded', 'invalid_amount',
+    'invalid_wager', 'invalid_bet', 'invalid_target', 'invalid_direction', 'invalid_position', 'rate_limited', 'busy',
+]);
+function accountActionNextHint(error) {
+    switch (error) {
+        case 'account_not_linked':
+            return 'Link this operator first: create an agent link code on lightningfaucet.com (profile page), then call link_account.';
+        case 'owner_cap_per_bet':
+        case 'owner_cap_per_day':
+        case 'tool_disabled':
+            return 'The account owner sets these limits on lightningfaucet.com. Read them with get_agent_limits; stake no more than limit_sats or remaining_today_sats, or ask the owner to change them. Do not retry unchanged.';
+        case 'insufficient_balance':
+            return 'Agents use deposited sats only (bonus sats are never used). Deposit to the linked account, then retry with the same idempotency_key.';
+        case 'odds_changed':
+            return 'The price or line moved. To accept it, call place_bet again with the SAME idempotency_key, expected_odds_pct = round(100 / current_multiplier, 2) and expected_line_version = current_line_version.';
+        case 'idempotency_key_reused':
+            return 'That key was already used for a different request. Retry the original request unchanged, or use a fresh key for a new one.';
+        case 'bet_in_progress':
+        case 'busy':
+            return 'Wait a few seconds and retry with the same idempotency_key. If it was already placed you get the original result back.';
+        case 'rate_limited':
+            return 'Too many requests. Wait and retry with the same idempotency_key.';
+        case 'feature_disabled':
+            return 'This tool is not enabled on the server yet.';
+        case 'market_not_supported':
+            return 'place_bet supports fixed_odds markets only. Pick one with odds_model fixed_odds from markets_browse.';
+        case 'price_required':
+            return 'Pass expected_odds_pct and expected_line_version from markets_browse so the bet is placed at the price you saw.';
+        default:
+            return 'Read the message field, adjust the request, and retry with a fresh idempotency_key.';
+    }
+}
 /** Backend refusals that carry a structured reply the model can act on (not thrown). */
 const PREDICTION_REFUSALS = new Set([
     'odds_changed', 'position_cap_exceeded', 'budget_exceeded', 'insufficient_balance', 'bet_in_progress',
@@ -1038,6 +1091,41 @@ exports.TOOL_DEFINITIONS = [
     {
         name: 'get_earn_status',
         description: 'Status of the linked Lightning Faucet account: cash balance (bonus funds excluded), deposited and withdrawn totals, daily streak and an earn summary by source. Needs an operator key linked with link_account; unlinked keys get account_not_linked.',
+        inputSchema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'place_bet',
+        description: 'Bet on a fixed-odds prediction market with the REAL deposited sats of the Lightning Faucet account this operator is linked to (link_account first). Bonus sats are never used, and agent bets earn no promos, rebates or leaderboard prizes. You bet at the offered price only: pass expected_odds_pct = round(100 / multiplier, 2) and expected_line_version from markets_browse, and the bet is refused with the current offer if either moved. Same limits as the website (min/max stake, exposure and position caps), plus per-bet and per-day limits the account owner sets on lightningfaucet.com (read them with get_agent_limits). idempotency_key is required: reuse the same key on any retry and you get the original bet back, never a second one. Fixed-odds markets only. REQUIRES OPERATOR KEY linked with link_account.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                market_id: { type: 'integer', minimum: 1, description: 'Market id from markets_browse (odds_model fixed_odds)' },
+                position: { type: 'string', enum: ['yes', 'no'], description: 'Side to back' },
+                amount_sats: { type: 'integer', minimum: 1, description: 'Stake in sats from the linked account\'s deposited balance' },
+                expected_odds_pct: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 100, description: 'round(100 / multiplier, 2) for your side, from markets_browse' },
+                expected_line_version: { type: 'integer', minimum: 0, description: 'The line_version you saw in markets_browse' },
+                idempotency_key: { type: 'string', minLength: 1, maxLength: 100, description: 'Required. Unique per bet (a UUID is fine); reuse the same key when retrying' },
+            },
+            required: ['market_id', 'position', 'amount_sats', 'expected_odds_pct', 'expected_line_version', 'idempotency_key'],
+        },
+    },
+    {
+        name: 'play_dice',
+        description: 'Roll provably fair dice with the REAL deposited sats of the Lightning Faucet account this operator is linked to (link_account first). Bonus sats are never used, and agent rolls earn no promos, rebates, races or jackpots. Pick a target (1 to 9998, hundredths of the 0.00-99.99 roll scale) and over or under; the win chance and multiplier in the reply are what the website shows. Same wager grid and limits as the website, plus per-bet and per-day limits the account owner sets on lightningfaucet.com (read them with get_agent_limits). The reply carries the server seed hash, client seed and nonce to verify the roll. idempotency_key is required: reuse the same key on any retry and you get the original roll back, never a second one. REQUIRES OPERATOR KEY linked with link_account.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                wager_sats: { type: 'integer', minimum: 1, description: 'Wager in sats from the linked account\'s deposited balance' },
+                target: { type: 'integer', minimum: 1, maximum: 9998, description: 'Target in hundredths, 5000 = 50.00' },
+                direction: { type: 'string', enum: ['over', 'under'] },
+                idempotency_key: { type: 'string', minLength: 1, maxLength: 100, description: 'Required. Unique per roll; reuse the same key when retrying' },
+            },
+            required: ['wager_sats', 'target', 'direction', 'idempotency_key'],
+        },
+    },
+    {
+        name: 'get_agent_limits',
+        description: 'The limits the owner of the linked Lightning Faucet account set for place_bet and play_dice: whether each tool is on, the per-bet and per-day caps in sats, what has been staked in the last 24 hours and what is left, plus the deposited cash balance. Read only. Needs an operator key linked with link_account.',
         inputSchema: { type: 'object', properties: {} },
     },
     {
@@ -2246,6 +2334,30 @@ async function callTool(name, args, ctx) {
             case 'get_earn_status': {
                 const result = await session.requireClient().getEarnStatus();
                 return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
+            case 'get_agent_limits': {
+                const result = await session.requireClient().getAgentLimits();
+                return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
+            case 'place_bet':
+            case 'play_dice': {
+                // The caller owns the idempotency key; none is ever generated here (see prediction_place_bet).
+                const parsed = name === 'place_bet' ? PlaceBetSchema.parse(args ?? {}) : PlayDiceSchema.parse(args ?? {});
+                try {
+                    const client = session.requireClient();
+                    const result = name === 'place_bet'
+                        ? await client.placeBet(parsed)
+                        : await client.playDice(parsed);
+                    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+                }
+                catch (e) {
+                    // A refusal is information the model acts on (cap, price moved, fund), not a failure.
+                    if (e instanceof lightning_faucet_js_1.ApiError && ACCOUNT_ACTION_REFUSALS.has(String(e.response.error ?? ''))) {
+                        const refusal = { ...e.response, idempotency_key: parsed.idempotency_key, next: accountActionNextHint(String(e.response.error)) };
+                        return { content: [{ type: 'text', text: JSON.stringify(refusal, null, 2) }] };
+                    }
+                    throw e;
+                }
             }
             case 'prediction_markets': {
                 const parsed = PredictionMarketsSchema.parse(args ?? {});

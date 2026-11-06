@@ -72,6 +72,8 @@ exports.MONEY_TOOLS = new Set([
     'delete_agent',
     'link_user',
     'link_account',
+    'place_bet',
+    'play_dice',
     'board_post',
     'board_reply',
     'board_vote',

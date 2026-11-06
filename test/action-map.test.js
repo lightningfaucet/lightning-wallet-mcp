@@ -20,7 +20,7 @@ register_webhook remove_lightning_address rotate_agent_key rotate_api_key rotate
 security_status set_budget set_lightning_address set_nostr_identity test_webhook transactions
 transfer_between_agents transfer_to_agent unlock_agent update_agent update_operator verify_operator_email
 whoami withdraw withdraw_from_agent withdraw_lightning withdraw_link promo_status
-markets_browse link_account get_earn_status prediction_markets prediction_market prediction_place_bet prediction_my_bets prediction_positions`.split(/\s+/));
+markets_browse link_account get_earn_status place_bet play_dice get_agent_limits prediction_markets prediction_market prediction_place_bet prediction_my_bets prediction_positions`.split(/\s+/));
 
 function withStubbedFetch(reply, fn) {
   const calls = [];
@@ -66,6 +66,9 @@ const cases = [
   ['marketsBrowse', [{ category: 'nfl', limit: 5 }], 'markets_browse', ['category', 'limit']],
   ['linkAccount', ['ABCD-EFGH-JKLM-NPQR', false], 'link_account', ['link_code', 'merge_balance']],
   ['getEarnStatus', [], 'get_earn_status', []],
+  ['placeBet', [{ market_id: 9, position: 'yes', amount_sats: 50, expected_odds_pct: 58, expected_line_version: 2, idempotency_key: 'k1' }], 'place_bet', ['market_id', 'position', 'amount_sats', 'expected_odds_pct', 'expected_line_version', 'idempotency_key']],
+  ['playDice', [{ wager_sats: 10, target: 5000, direction: 'under', idempotency_key: 'k2' }], 'play_dice', ['wager_sats', 'target', 'direction', 'idempotency_key']],
+  ['getAgentLimits', [], 'get_agent_limits', []],
   ['predictionPlaceBet', [{ market_id: 4321, position: 'yes', amount_sats: 10, idempotency_key: 'k1' }], 'prediction_place_bet', ['market_id', 'position', 'amount_sats', 'idempotency_key']],
   ['predictionPlaceBet', [{ market_id: 4321, position: 'no', amount_sats: 10, idempotency_key: 'k2', expected_odds_pct: 48.5, expected_line_version: 3 }], 'prediction_place_bet', ['expected_odds_pct', 'expected_line_version']],
   ['predictionMyBets', [{ status: 'won', agent_id: 7 }], 'prediction_my_bets', ['status', 'agent_id']],

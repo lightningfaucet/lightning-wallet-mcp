@@ -603,6 +603,28 @@ export declare class LightningFaucetClient {
     linkAccount(linkCode: string, mergeBalance?: boolean): Promise<Record<string, unknown>>;
     /** Linked account status: cash balance, streak and earn summary (linked operators only). */
     getEarnStatus(): Promise<Record<string, unknown>>;
+    /**
+     * Bet on a fixed-odds prediction market with the LINKED account's deposited sats (operator key,
+     * after link_account). Same rules as the website; the owner's per-bet and per-day limits apply.
+     * Refusals come back as ApiError with the structured reply in .response.
+     */
+    placeBet(p: {
+        market_id: number;
+        position: 'yes' | 'no';
+        amount_sats: number;
+        expected_odds_pct: number;
+        expected_line_version: number;
+        idempotency_key: string;
+    }): Promise<Record<string, unknown>>;
+    /** Roll provably fair dice with the LINKED account's deposited sats (operator key, after link_account). */
+    playDice(p: {
+        wager_sats: number;
+        target: number;
+        direction: 'over' | 'under';
+        idempotency_key: string;
+    }): Promise<Record<string, unknown>>;
+    /** The per-tool limits the account owner set for place_bet and play_dice, and what is left today. */
+    getAgentLimits(): Promise<Record<string, unknown>>;
     /** One market in full. */
     predictionMarket(marketId: number): Promise<Record<string, unknown>>;
     /**
