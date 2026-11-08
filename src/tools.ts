@@ -110,7 +110,7 @@ const RegisterOperatorSchema = z.object({
 });
 
 const GetDepositInvoiceSchema = z.object({
-  amount_sats: z.number().int().min(100).max(10_000_000).describe('Amount in satoshis to deposit'),
+  amount_sats: z.number().int().min(10).max(10_000_000).describe('Amount in satoshis to deposit (minimum 10)'),
 });
 
 const CreateAgentSchema = z.object({
@@ -614,7 +614,7 @@ export const TOOL_DEFINITIONS = [
       inputSchema: {
         type: 'object',
         properties: {
-          amount_sats: { type: 'integer', minimum: 100, description: 'Amount in satoshis to deposit' },
+          amount_sats: { type: 'integer', minimum: 10, description: 'Amount in satoshis to deposit (minimum 10)' },
         },
         required: ['amount_sats'],
       },
