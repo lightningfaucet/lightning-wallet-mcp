@@ -84,7 +84,7 @@ const RegisterOperatorSchema = zod_1.z.object({
     email: zod_1.z.string().email().optional().describe('Optional email address, used for notifications and account notices. A verification link is sent.'),
 });
 const GetDepositInvoiceSchema = zod_1.z.object({
-    amount_sats: zod_1.z.number().int().min(100).max(10_000_000).describe('Amount in satoshis to deposit'),
+    amount_sats: zod_1.z.number().int().min(10).max(10_000_000).describe('Amount in satoshis to deposit (minimum 10)'),
 });
 const CreateAgentSchema = zod_1.z.object({
     name: zod_1.z.string().describe('Name for the agent'),
@@ -537,7 +537,7 @@ exports.TOOL_DEFINITIONS = [
         inputSchema: {
             type: 'object',
             properties: {
-                amount_sats: { type: 'integer', minimum: 100, description: 'Amount in satoshis to deposit' },
+                amount_sats: { type: 'integer', minimum: 10, description: 'Amount in satoshis to deposit (minimum 10)' },
             },
             required: ['amount_sats'],
         },
