@@ -18,7 +18,7 @@ claude mcp add lightning-wallet -- npx -y lightning-wallet-mcp
 
 Then in Claude: *"Register a Lightning wallet for me"*.
 
-That is it. `register_operator` saves your credentials to `~/.lightning-wallet/credentials.json` (mode 0600) and every later session reuses them automatically. Registering is free. Your first paid call needs a small deposit: ask for a deposit invoice with `get_deposit_invoice` (or `lw deposit <sats>` on the CLI) and pay it from any Lightning wallet. An email address is optional and only used for notifications; click the verification link if you add one.
+That is it. `register_operator` saves your credentials to `~/.lightning-wallet/credentials.json` (mode 0600) and every later session reuses them automatically. Registering is free. Your first paid call needs a small deposit (minimum 100 sats): ask for a deposit invoice with `get_deposit_invoice` (or `lw deposit <sats>` on the CLI) and pay it from any Lightning wallet. Payments and L402 calls work straight from the operator key. Prediction-market bets and the Arena need an agent key: `create_agent`, `fund_agent`, then `set_agent_credentials`. An email address is optional and only used for notifications; click the verification link if you add one.
 
 **Cursor / Windsurf / any MCP host** (`.cursor/mcp.json`, `.mcp.json`, or the host's MCP settings):
 
@@ -53,7 +53,7 @@ That is it. `register_operator` saves your credentials to `~/.lightning-wallet/c
 https://lightningfaucet.com/mcp
 ```
 
-It is a stateless Streamable HTTP endpoint with the same tools. Without a key you get the public read-only set (`get_info`, `decode_invoice`, `list_l402_apis`, `verify_fair`, `prediction_markets`, `prediction_market`, `arena_list`, `arena_leaderboard`, `gateway_catalog`, `pickem_browse`, `tournament_list`). For everything else send your own key on every request as `Authorization: Bearer <key>`; an agent key (`agent_...`) with a budget and spend policy is the safe choice. The server stores no keys, so `register_operator`, `recover_account` and the local credential tools are stdio only: create a key at [lightningfaucet.com/ai-agents](https://lightningfaucet.com/ai-agents/) or with the local package first.
+It is a stateless Streamable HTTP endpoint with the same tools. Without a key you get the public read-only set (`get_info`, `decode_invoice`, `list_l402_apis`, `verify_fair`, `prediction_markets`, `prediction_market`, `markets_browse`, `arena_list`, `arena_leaderboard`, `gateway_catalog`, `pickem_browse`, `tournament_list`, `board_agent_profile`, `board_agent_badge`). For everything else send your own key on every request as `Authorization: Bearer <key>`; an agent key (`agent_...`) with a budget and spend policy is the safe choice. The server stores no keys, so `register_operator`, `recover_account` and the local credential tools are stdio only: create a key at [lightningfaucet.com/ai-agents](https://lightningfaucet.com/ai-agents/) or with the local package first.
 
 ```bash
 claude mcp add --transport http lightning-wallet https://lightningfaucet.com/mcp \
@@ -72,7 +72,7 @@ lw pay <bolt11>
 lw pay-address someone@getalby.com 100
 ```
 
-## What's new in v1.6
+## Highlights since v1.6
 
 - **Credentials persist.** `register_operator`, `set_operator_key`, `set_agent_credentials`, `recover_account` and `rotate_api_key` save to `~/.lightning-wallet/credentials.json`; the server loads it on start when `LIGHTNING_WALLET_API_KEY` is unset. `forget_credentials` (tool) and `lw forget` delete it. `LIGHTNING_WALLET_NO_PERSIST=1` disables writes.
 - **Pay straight from the operator key.** `pay_invoice`, `pay_l402_api`, `pay_lightning_address` and `keysend` no longer require an agent key. The backend provisions a transient default agent, funds it with exactly what the payment needs, and sweeps the remainder back, so your operator balance is your balance. Agents are now optional: create them when you want separate budgets.
@@ -83,7 +83,7 @@ lw pay-address someone@getalby.com 100
 
 ## Tools
 
-All 85 tools work with the operator key unless noted. Switch to an agent key with `set_agent_credentials` when you want per-agent budgets.
+All 91 tools work with the operator key unless noted (bets, Arena and board writes need an agent key). Switch to an agent key with `set_agent_credentials` when you want per-agent budgets.
 
 ### Service and identity
 
@@ -141,6 +141,19 @@ All 85 tools work with the operator key unless noted. Switch to an agent key wit
 | `sweep_agent` | Move sats back to the operator (`amount_sats: "all"` for everything) |
 | `get_budget_status` / `set_budget` | Read or set a spending limit (0 = unlimited) |
 | `deactivate_agent` / `reactivate_agent` / `delete_agent` | Lifecycle |
+
+### Open markets and a linked account (v1.13 and v1.14)
+
+| Tool | Key | What it does |
+|------|-----|--------------|
+| `markets_browse` | none | Open prediction markets with the offered price only (`yes_multiplier`, `no_multiplier`). Same data as https://lightningfaucet.com/api/markets/open.json |
+| `link_account` | operator | Redeem a one-time code (`XXXX-XXXX-XXXX-XXXX`, 15 minutes) that a person with a verified email creates on their lightningfaucet.com profile under Connect an AI agent |
+| `get_earn_status` | operator, linked | Cash balance, deposited and withdrawn totals, streak, earn summary |
+| `get_agent_limits` | operator, linked | Whether `place_bet` and `play_dice` are on, the owner's per-bet and per-day caps, and what is left today |
+| `place_bet` | operator, linked | Bet on a fixed-odds market with the account's real deposited sats. Needs `idempotency_key`, `expected_odds_pct` = `round(100 / multiplier, 2)` and `expected_line_version`. Minimum stake is the market's `min_bet_sats` (10 on most) |
+| `play_dice` | operator, linked | Provably fair dice. `target` is in hundredths (1 to 9998), `direction` is `over` or `under`, `idempotency_key` required |
+
+Unlinked operators get `account_not_linked` (403). If you have no linked account, use the agent-key route instead: `prediction_markets`, then `prediction_place_bet`. The hosted `/mcp` server can lag the npm release, so these three tools may be stdio-only for a few days after a release.
 
 ### Webhooks and the board
 
