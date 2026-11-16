@@ -135,10 +135,10 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                format: { type: 'string', enum: ['json', 'csv'], default: 'json' },
+                format: { type: 'string', enum: ['json', 'csv'], default: 'json', description: 'Output format: json or csv. Default json' },
                 start_date: { type: 'string', description: 'Inclusive start, YYYY-MM-DD' },
                 end_date: { type: 'string', description: 'Inclusive end, YYYY-MM-DD' },
-                include_pending: { type: 'boolean', default: false },
+                include_pending: { type: 'boolean', default: false, description: 'Include pending (unsettled) transactions. Default false' },
             },
         },
     },
@@ -147,7 +147,7 @@ exports.AGENT_TOOLS = [
         description: 'Spending and earning analytics for this agent over a window: total spent and received, transaction count, average payment, and top L402 destinations. Read-only. REQUIRES AGENT KEY.',
         inputSchema: {
             type: 'object',
-            properties: { period: { type: 'string', enum: ['24h', '7d', '30d', 'all'], default: '30d' } },
+            properties: { period: { type: 'string', enum: ['24h', '7d', '30d', 'all'], default: '30d', description: 'Reporting window: 24h, 7d, 30d or all. Default 30d' } },
         },
     },
     {
@@ -156,9 +156,9 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                category: { type: 'string' },
-                page: { type: 'integer', minimum: 1, default: 1 },
-                page_size: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+                category: { type: 'string', description: 'Catalog category to filter by, for example data or ai' },
+                page: { type: 'integer', minimum: 1, default: 1, description: 'Page number, starting at 1. Default 1' },
+                page_size: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Rows per page, 1 to 50. Default 20' },
             },
         },
     },
@@ -168,9 +168,9 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                upstream_url: { type: 'string' },
-                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET' },
-                upstream_headers: { type: 'object', additionalProperties: { type: 'string' } },
+                upstream_url: { type: 'string', description: 'Public https URL of the endpoint to sell, for example https://api.example.com/v1/data. Private and localhost addresses are refused' },
+                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET', description: 'HTTP method used to call your upstream URL. Default GET' },
+                upstream_headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Extra HTTP headers sent to your upstream, as a JSON object of header name to value, for example {"X-Api-Key": "secret"}' },
             },
             required: ['upstream_url'],
         },
@@ -181,14 +181,14 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                name: { type: 'string', maxLength: 100 },
-                description: { type: 'string', maxLength: 500 },
-                upstream_url: { type: 'string' },
-                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET' },
-                price_sats: { type: 'integer', minimum: 1 },
-                category: { type: 'string' },
-                upstream_headers: { type: 'object', additionalProperties: { type: 'string' } },
-                upstream_timeout_ms: { type: 'integer', minimum: 1000, maximum: 30000 },
+                name: { type: 'string', maxLength: 100, description: 'Public name of the paid endpoint, up to 100 characters, for example Weather Forecast API' },
+                description: { type: 'string', maxLength: 500, description: 'What buyers get for each paid call, up to 500 characters' },
+                upstream_url: { type: 'string', description: 'Public https URL of the endpoint to sell, for example https://api.example.com/v1/data. Private and localhost addresses are refused' },
+                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET', description: 'HTTP method used to call your upstream URL. Default GET' },
+                price_sats: { type: 'integer', minimum: 1, description: 'Price per call in satoshis (sats, not msats), integer 1 or more, for example 50' },
+                category: { type: 'string', description: 'Catalog category, for example data, finance or ai' },
+                upstream_headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Extra HTTP headers sent to your upstream, as a JSON object of header name to value, for example {"X-Api-Key": "secret"}' },
+                upstream_timeout_ms: { type: 'integer', minimum: 1000, maximum: 30000, description: 'Upstream timeout in milliseconds, 1000 to 30000, for example 10000' },
             },
             required: ['name', 'upstream_url', 'price_sats'],
         },
@@ -204,14 +204,14 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                endpoint_id: { type: 'integer', minimum: 1 },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                price_sats: { type: 'integer', minimum: 1 },
-                upstream_url: { type: 'string' },
-                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'] },
-                upstream_headers: { type: 'object', additionalProperties: { type: 'string' } },
-                upstream_timeout_ms: { type: 'integer', minimum: 1000, maximum: 30000 },
+                endpoint_id: { type: 'integer', minimum: 1, description: 'Gateway endpoint id (integer) from gateway_list, for example 12' },
+                name: { type: 'string', description: 'New public name, for example Weather Forecast API' },
+                description: { type: 'string', description: 'New description of what buyers get for each paid call' },
+                price_sats: { type: 'integer', minimum: 1, description: 'New price per call in satoshis (sats, not msats), integer 1 or more, for example 50' },
+                upstream_url: { type: 'string', description: 'Public https URL of the endpoint to sell, for example https://api.example.com/v1/data. Private and localhost addresses are refused' },
+                upstream_method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], description: 'HTTP method used to call your upstream URL. Default GET' },
+                upstream_headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Extra HTTP headers sent to your upstream, as a JSON object of header name to value, for example {"X-Api-Key": "secret"}. Replaces the existing headers' },
+                upstream_timeout_ms: { type: 'integer', minimum: 1000, maximum: 30000, description: 'Upstream timeout in milliseconds, 1000 to 30000, for example 10000' },
             },
             required: ['endpoint_id'],
         },
@@ -219,26 +219,26 @@ exports.AGENT_TOOLS = [
     {
         name: 'gateway_pause',
         description: 'Seller side: stop selling an endpoint without deleting it. Reversible with gateway_resume. ' + GATEWAY_KEYS,
-        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1 } }, required: ['endpoint_id'] },
+        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1, description: 'Gateway endpoint id (integer) from gateway_list, for example 12' } }, required: ['endpoint_id'] },
     },
     {
         name: 'gateway_resume',
         description: 'Seller side: resume a paused endpoint. ' + GATEWAY_KEYS,
-        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1 } }, required: ['endpoint_id'] },
+        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1, description: 'Gateway endpoint id (integer) from gateway_list, for example 12' } }, required: ['endpoint_id'] },
     },
     {
         name: 'gateway_delete',
         description: 'Seller side: permanently delete a gateway endpoint. Prefer gateway_pause if you may want it back. confirm must be true. ' + GATEWAY_KEYS,
         inputSchema: {
             type: 'object',
-            properties: { endpoint_id: { type: 'integer', minimum: 1 }, confirm: { type: 'boolean', enum: [true] } },
+            properties: { endpoint_id: { type: 'integer', minimum: 1, description: 'Gateway endpoint id (integer) from gateway_list, for example 12' }, confirm: { type: 'boolean', enum: [true], description: 'Must be true. Deleting an endpoint is permanent and stops all sales' } },
             required: ['endpoint_id', 'confirm'],
         },
     },
     {
         name: 'gateway_stats',
         description: 'Seller side: calls, revenue and recent activity for one of your gateway endpoints. Read-only. ' + GATEWAY_KEYS,
-        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1 } }, required: ['endpoint_id'] },
+        inputSchema: { type: 'object', properties: { endpoint_id: { type: 'integer', minimum: 1, description: 'Gateway endpoint id (integer) from gateway_list, for example 12' } }, required: ['endpoint_id'] },
     },
     {
         name: 'list_l402_apis',
@@ -246,11 +246,11 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                source: { type: 'string', enum: ['first_party', 'registry', 'discovered', 'gateway'], default: 'registry' },
-                category: { type: 'string' },
-                search: { type: 'string' },
-                limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
-                page: { type: 'integer', minimum: 1, default: 1 },
+                source: { type: 'string', enum: ['first_party', 'registry', 'discovered', 'gateway'], default: 'registry', description: 'Where to list from: first_party, registry, discovered or gateway. Default registry' },
+                category: { type: 'string', description: 'Category filter for registry and gateway sources, for example data or finance' },
+                search: { type: 'string', description: 'Text to match on API name or provider, for example weather' },
+                limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Rows per page, 1 to 50. Default 20' },
+                page: { type: 'integer', minimum: 1, default: 1, description: 'Page number, starting at 1. Default 1' },
             },
         },
     },
@@ -261,7 +261,7 @@ exports.AGENT_TOOLS = [
             type: 'object',
             properties: {
                 server_seed: { type: 'string', description: 'Revealed server seed' },
-                client_seed: { type: 'string' },
+                client_seed: { type: 'string', description: 'The client seed used for the roll, as the exact string shown in the roll result, for example my-seed-123' },
                 nonce: { type: 'integer', minimum: 0, description: 'Nonce the roll consumed' },
                 server_seed_hash: { type: 'string', description: 'Optional SHA-256 commitment to check' },
                 claimed_result: { type: 'integer', minimum: 0, description: 'Optional reported roll to compare' },
@@ -284,7 +284,7 @@ exports.AGENT_TOOLS = [
         inputSchema: {
             type: 'object',
             properties: {
-                agent_id: { type: 'integer', minimum: 1 },
+                agent_id: { type: 'integer', minimum: 1, description: 'Agent id (integer) from list_agents, for example 7' },
                 per_tx_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Largest single spend' },
                 daily_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Rolling 24h gross spend' },
                 per_market_max_sats: { type: ['integer', 'null'], minimum: 0, description: 'Net stake on one prediction market' },

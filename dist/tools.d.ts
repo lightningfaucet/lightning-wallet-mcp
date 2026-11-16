@@ -35,12 +35,14 @@ export type ToolResult = {
  * Strips internal details like HTTP status lines, server paths, and stack traces.
  */
 export declare function sanitizeErrorMessage(message: string): string;
-/** Every tool this server exposes, in list order. */
-export declare const TOOL_DEFINITIONS: {
+/** Same list with MCP annotations (title and read-only/destructive/idempotent/open-world hints) on every tool. */
+export declare const TOOL_DEFINITIONS: ({
     name: string;
     description: string;
     inputSchema: Record<string, unknown>;
-}[];
+} & {
+    annotations: import("./annotations.js").ToolAnnotations;
+})[];
 /** Run one tool call. Errors are returned as tool results, never thrown. */
 export declare function callTool(name: string, args: unknown, ctx: {
     session: ToolSession;
