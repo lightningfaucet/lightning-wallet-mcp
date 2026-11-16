@@ -12,6 +12,7 @@ exports.callTool = callTool;
  */
 const zod_1 = require("zod");
 const agent_tools_js_1 = require("./agent-tools.js");
+const annotations_js_1 = require("./annotations.js");
 const lightning_faucet_js_1 = require("./lightning-faucet.js");
 /**
  * Board responses carry `inbox: { unread_count, hint }`. Put the hint first in the tool text
@@ -409,7 +410,7 @@ const PredictionMyBetsSchema = zod_1.z.object({
     offset: zod_1.z.number().int().min(0).optional().describe('Pagination offset'),
 });
 /** Every tool this server exposes, in list order. */
-exports.TOOL_DEFINITIONS = [
+const RAW_TOOL_DEFINITIONS = [
     {
         name: 'check_balance',
         description: "Check your current Lightning balance in satoshis. Works with both operator and agent keys.",
@@ -1069,10 +1070,10 @@ exports.TOOL_DEFINITIONS = [
         inputSchema: {
             type: 'object',
             properties: {
-                market_type: { type: 'string', enum: ['sports', 'btc_price'] },
+                market_type: { type: 'string', enum: ['sports', 'btc_price'], description: 'Market type filter: sports (fixed-odds books and series) or btc_price (parimutuel). Omit for all' },
                 category: { type: 'string', description: 'League or category key, e.g. nfl, nba, epl' },
                 limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
-                offset: { type: 'integer', minimum: 0 },
+                offset: { type: 'integer', minimum: 0, description: 'Number of markets to skip for pagination, for example 20. Default 0' },
             },
         },
     },
@@ -1117,7 +1118,7 @@ exports.TOOL_DEFINITIONS = [
             properties: {
                 wager_sats: { type: 'integer', minimum: 1, description: 'Wager in sats from the linked account\'s deposited balance' },
                 target: { type: 'integer', minimum: 1, maximum: 9998, description: 'Target in hundredths, 5000 = 50.00' },
-                direction: { type: 'string', enum: ['over', 'under'] },
+                direction: { type: 'string', enum: ['over', 'under'], description: 'Win when the roll is over or under the target: over or under, for example under' },
                 idempotency_key: { type: 'string', minLength: 1, maxLength: 100, description: 'Required. Unique per roll; reuse the same key when retrying' },
             },
             required: ['wager_sats', 'target', 'direction', 'idempotency_key'],
@@ -1230,10 +1231,10 @@ exports.TOOL_DEFINITIONS = [
             type: 'object',
             properties: {
                 status: { type: 'string', enum: ['open', 'upcoming', 'closed', 'resolved', 'cancelled', 'all'], description: 'Default open' },
-                market_type: { type: 'string', enum: ['sports', 'btc_price'] },
+                market_type: { type: 'string', enum: ['sports', 'btc_price'], description: 'Market type filter: sports (fixed-odds books and series) or btc_price (parimutuel). Omit for all' },
                 category: { type: 'string', description: 'League or category key, e.g. nfl, nba, nhl, mlb, ncaaf, mma, epl, ucl, tennis, btc_daily' },
                 limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
-                offset: { type: 'integer', minimum: 0 },
+                offset: { type: 'integer', minimum: 0, description: 'Number of markets to skip for pagination, for example 20. Default 0' },
             },
         },
     },
@@ -1271,10 +1272,10 @@ exports.TOOL_DEFINITIONS = [
         inputSchema: {
             type: 'object',
             properties: {
-                status: { type: 'string', enum: ['active', 'won', 'lost', 'refunded'] },
+                status: { type: 'string', enum: ['active', 'won', 'lost', 'refunded'], description: 'Filter by bet status: active, won, lost or refunded. Omit for all' },
                 agent_id: { type: 'integer', minimum: 1, description: 'Operator key only: limit to one agent' },
                 limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 50' },
-                offset: { type: 'integer', minimum: 0 },
+                offset: { type: 'integer', minimum: 0, description: 'Number of bets to skip for pagination, for example 20. Default 0' },
             },
         },
     },
@@ -1285,6 +1286,8 @@ exports.TOOL_DEFINITIONS = [
     },
     ...agent_tools_js_1.AGENT_TOOLS,
 ];
+/** Same list with MCP annotations (title and read-only/destructive/idempotent/open-world hints) on every tool. */
+exports.TOOL_DEFINITIONS = (0, annotations_js_1.withAnnotations)(RAW_TOOL_DEFINITIONS);
 /** Run one tool call. Errors are returned as tool results, never thrown. */
 async function callTool(name, args, ctx) {
     const { session, creds } = ctx;
