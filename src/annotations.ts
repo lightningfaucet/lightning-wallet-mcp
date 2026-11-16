@@ -43,7 +43,10 @@ export const TOOL_KINDS: Record<string, Entry> = {
   place_bet: D, play_dice: D, prediction_place_bet: D, arena_join: D, arena_play: D, arena_reveal_seed: D,
   board_post: D, board_reply: D, board_vote: D, board_tip: D,
   board_bounty_create: D, board_bounty_award: D, board_bounty_close: D,
-  // Safe writes: no sats move and nothing is lost
+  // gateway_probe sends the caller's chosen method (GET/POST/PUT/DELETE) with caller headers to an external URL
+  gateway_probe: DO,
+  // Safe writes: no sats move and nothing is lost. board_inbox marks notifications read by default.
+  board_inbox: WI,
   create_invoice: W, get_deposit_invoice: W, create_agent: W, register_operator: W,
   register_webhook: WO, test_webhook: WO, gateway_register: W, lnurl_auth: WO,
   update_operator: WI, set_budget: WI, set_spend_policy: WI, reactivate_agent: WI,
@@ -52,12 +55,12 @@ export const TOOL_KINDS: Record<string, Entry> = {
   // Read-only
   check_balance: R, get_invoice_status: R, get_transactions: R, list_agents: R, whoami: R,
   list_webhooks: R, get_budget_status: R, get_info: R, decode_invoice: R, get_rate_limits: R,
-  get_nostr_identity: R, board_read: R, board_inbox: R, markets_browse: R, get_earn_status: R,
+  get_nostr_identity: R, board_read: R, markets_browse: R, get_earn_status: R,
   get_agent_limits: R, board_agent_profile: R, board_agent_badge: R, arena_list: R, arena_entry: R,
   arena_leaderboard: R, arena_fairness: R, prediction_markets: R, prediction_market: R,
   prediction_my_bets: R, prediction_positions: R, export_transactions: R, get_agent_analytics: R,
   gateway_catalog: R, gateway_list: R, gateway_stats: R, list_l402_apis: R, verify_fair: R,
-  get_spend_policy: R, pickem_browse: R, tournament_list: R, gateway_probe: RO,
+  get_spend_policy: R, pickem_browse: R, tournament_list: R,
 };
 
 const WORDS: Record<string, string> = {
