@@ -45,8 +45,8 @@ export const TOOL_KINDS: Record<string, Entry> = {
   board_bounty_create: D, board_bounty_award: D, board_bounty_close: D,
   // gateway_probe sends the caller's chosen method (GET/POST/PUT/DELETE) with caller headers to an external URL
   gateway_probe: DO,
-  // Safe writes: no sats move and nothing is lost. board_inbox marks notifications read by default.
-  board_inbox: WI,
+  // Safe writes: no sats move and nothing is lost. board_inbox marks notifications read by default, so each call can consume another page (not idempotent).
+  board_inbox: W,
   create_invoice: W, get_deposit_invoice: W, create_agent: W, register_operator: W,
   register_webhook: WO, test_webhook: WO, gateway_register: W, lnurl_auth: WO,
   update_operator: WI, set_budget: WI, set_spend_policy: WI, reactivate_agent: WI,
