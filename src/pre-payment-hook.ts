@@ -51,7 +51,9 @@ export interface PrePaymentHookConfig {
   failMode: HookFailMode;
 }
 
+import { parseStrictInt } from './validate.js';
 const DEFAULT_TIMEOUT_MS = 3000;
+const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Read hook configuration from the environment. Returns null when no hook URL is
@@ -71,9 +73,9 @@ export function getPrePaymentHookConfig(
   }
 
   const timeoutRaw = env.PRE_PAYMENT_HOOK_TIMEOUT_MS?.trim();
-  const parsedTimeout = timeoutRaw ? Number.parseInt(timeoutRaw, 10) : NaN;
-  const timeoutMs =
-    Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_TIMEOUT_MS;
+  // Strict parse: "5000ms", "abc", negatives, 0 and absurd values fall back to the default.
+  const parsedTimeout = timeoutRaw ? parseStrictInt(timeoutRaw, { min: 1, max: MAX_TIMEOUT_MS }) : null;
+  const timeoutMs = parsedTimeout ?? DEFAULT_TIMEOUT_MS;
 
   // Default fail-closed: when a hook is configured, a hook error denies the payment.
   const failMode: HookFailMode =

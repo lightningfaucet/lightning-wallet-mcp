@@ -11,6 +11,7 @@
 
 import { LightningFaucetClient, registerOperator, recoverOperatorAccount, getPublicInfo } from './lightning-faucet.js';
 import { loadCredentials, activeStoredKey, saveOperatorKey, saveAgentKey, forgetCredentials, describeCredentials, credentialsPath } from './credentials.js';
+import { parseStrictInt, describeIntRange } from './validate.js';
 const VERSION: string = (() => {
   try { return (require('../package.json') as { version: string }).version; } catch { return '0.0.0'; }
 })();
@@ -26,10 +27,12 @@ function getApiKey(): string {
   return key;
 }
 
-function intArg(value: unknown, name: string, opts: { min?: number } = {}): number {
-  const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
-  if (!Number.isInteger(n) || (opts.min !== undefined && n < opts.min)) {
-    error(`${name} must be an integer${opts.min !== undefined ? ` >= ${opts.min}` : ''}`);
+const MAX_SATS = 2_100_000_000_000_000; // 21M BTC in sats
+
+function intArg(value: unknown, name: string, opts: { min?: number; max?: number } = {}): number {
+  const n = parseStrictInt(value, opts);
+  if (n === null) {
+    error(`${name} must be ${describeIntRange(opts)}`);
   }
   return n;
 }
@@ -171,7 +174,7 @@ async function cmdPay(positional: string[], flags: Record<string, string | boole
   const invoice = positional[0];
   if (!invoice) error('Usage: lw pay <bolt11_invoice>');
   const client = getClient();
-  const maxFee = flags['max-fee'] ? parseInt(flags['max-fee'] as string, 10) : undefined;
+  const maxFee = flags['max-fee'] !== undefined ? intArg(flags['max-fee'], '--max-fee', { min: 0, max: MAX_SATS }) : undefined;
   const result = await client.payInvoice(invoice, maxFee);
   return {
     preimage: result.preimage,
@@ -190,7 +193,7 @@ async function cmdPayApi(positional: string[], flags: Record<string, string | bo
   const client = getClient();
   const method = (flags.method as string) || 'GET';
   const body = flags.body as string | undefined;
-  const maxSats = flags['max-sats'] ? parseInt(flags['max-sats'] as string, 10) : 1000;
+  const maxSats = flags['max-sats'] !== undefined ? intArg(flags['max-sats'], '--max-sats', { min: 1, max: MAX_SATS }) : 1000;
   const result = await client.l402Pay(url, method, body === undefined ? undefined : body, maxSats);
   const out: Record<string, unknown> = {
     data: result.data,
@@ -208,7 +211,7 @@ async function cmdCreateAgent(positional: string[], flags: Record<string, string
   const name = positional[0] || (flags.name as string);
   if (!name) error('Usage: lw create-agent <name> [--budget <sats>]');
   const client = getClient();
-  const budget = flags.budget ? parseInt(flags.budget as string, 10) : undefined;
+  const budget = flags.budget !== undefined ? intArg(flags.budget, '--budget', { min: 0, max: MAX_SATS }) : undefined;
   const result = await client.createAgent(name, undefined, budget);
   return {
     agent_id: result.agentId,
@@ -222,7 +225,7 @@ async function cmdFundAgent(positional: string[]): Promise<unknown> {
   const amount = positional[1];
   if (!agentId || !amount) error('Usage: lw fund-agent <agent_id> <amount_sats>');
   const client = getClient();
-  const result = await client.fundAgent(parseInt(agentId, 10), parseInt(amount, 10));
+  const result = await client.fundAgent(intArg(agentId, 'agent_id', { min: 1 }), intArg(amount, 'amount_sats', { min: 1, max: MAX_SATS }));
   return {
     amount_transferred: result.amountTransferred,
     new_operator_balance: result.newOperatorBalance,
@@ -245,7 +248,7 @@ async function cmdDeposit(positional: string[]): Promise<unknown> {
   const amount = positional[0];
   if (!amount) error('Usage: lw deposit <amount_sats>');
   const client = getClient();
-  const result = await client.getDepositInvoice(parseInt(amount, 10));
+  const result = await client.getDepositInvoice(intArg(amount, 'amount_sats', { min: 1, max: MAX_SATS }));
   return {
     bolt11: result.bolt11,
     payment_hash: result.paymentHash,
@@ -271,7 +274,7 @@ async function cmdWithdraw(positional: string[]): Promise<unknown> {
 }
 
 async function cmdWithdrawLink(positional: string[]): Promise<unknown> {
-  const amount = positional[0] ? parseInt(positional[0], 10) : undefined;
+  const amount = positional[0] !== undefined ? intArg(positional[0], 'amount_sats', { min: 1, max: MAX_SATS }) : undefined;
   const client = getClient();
   const result = await client.createWithdrawLink(amount);
   return {
@@ -288,8 +291,8 @@ async function cmdWithdrawLink(positional: string[]): Promise<unknown> {
 
 async function cmdTransactions(flags: Record<string, string | boolean>): Promise<unknown> {
   const client = getClient();
-  const limit = flags.limit ? parseInt(flags.limit as string, 10) : 10;
-  const offset = flags.offset ? parseInt(flags.offset as string, 10) : 0;
+  const limit = flags.limit !== undefined ? intArg(flags.limit, '--limit', { min: 1, max: 100 }) : 10;
+  const offset = flags.offset !== undefined ? intArg(flags.offset, '--offset', { min: 0 }) : 0;
   const result = await client.getTransactions(limit, offset);
   return {
     transactions: result.transactions.map(tx => ({

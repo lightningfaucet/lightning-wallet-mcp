@@ -56,7 +56,7 @@ const GatewayRegisterSchema = zod_1.z.object({
     upstream_method: zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('GET'),
     price_sats: zod_1.z.number().int().positive().describe('Price per call in sats'),
     category: zod_1.z.string().min(1).max(40).optional().describe('Catalog category'),
-    upstream_headers: zod_1.z.record(zod_1.z.string()).optional().describe('Headers sent to your upstream (for example its own auth)'),
+    upstream_headers: zod_1.z.record(zod_1.z.string(), zod_1.z.string()).optional().describe('Headers sent to your upstream (for example its own auth)'),
     upstream_timeout_ms: zod_1.z.number().int().min(1000).max(30000).optional(),
 });
 const GatewayUpdateSchema = zod_1.z.object({
@@ -66,7 +66,7 @@ const GatewayUpdateSchema = zod_1.z.object({
     price_sats: zod_1.z.number().int().positive().optional(),
     upstream_url: zod_1.z.string().url().optional(),
     upstream_method: zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
-    upstream_headers: zod_1.z.record(zod_1.z.string()).optional(),
+    upstream_headers: zod_1.z.record(zod_1.z.string(), zod_1.z.string()).optional(),
     upstream_timeout_ms: zod_1.z.number().int().min(1000).max(30000).optional(),
 });
 const GatewayIdSchema = zod_1.z.object({ endpoint_id: zod_1.z.number().int().positive().describe('Endpoint id from gateway_list') });
@@ -77,7 +77,7 @@ const GatewayDeleteSchema = zod_1.z.object({
 const GatewayProbeSchema = zod_1.z.object({
     upstream_url: zod_1.z.string().url(),
     upstream_method: zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('GET'),
-    upstream_headers: zod_1.z.record(zod_1.z.string()).optional(),
+    upstream_headers: zod_1.z.record(zod_1.z.string(), zod_1.z.string()).optional(),
 });
 const ListL402Schema = zod_1.z.object({
     source: zod_1.z.enum(['first_party', 'registry', 'discovered', 'gateway']).default('registry')

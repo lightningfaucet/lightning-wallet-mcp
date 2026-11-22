@@ -22,22 +22,11 @@ declare const VerifyFairSchema: z.ZodObject<{
     nonce: z.ZodNumber;
     server_seed_hash: z.ZodOptional<z.ZodString>;
     claimed_result: z.ZodOptional<z.ZodNumber>;
-    result_type: z.ZodOptional<z.ZodEnum<["dice", "roll"]>>;
-}, "strip", z.ZodTypeAny, {
-    client_seed: string;
-    server_seed: string;
-    nonce: number;
-    server_seed_hash?: string | undefined;
-    claimed_result?: number | undefined;
-    result_type?: "dice" | "roll" | undefined;
-}, {
-    client_seed: string;
-    server_seed: string;
-    nonce: number;
-    server_seed_hash?: string | undefined;
-    claimed_result?: number | undefined;
-    result_type?: "dice" | "roll" | undefined;
-}>;
+    result_type: z.ZodOptional<z.ZodEnum<{
+        dice: "dice";
+        roll: "roll";
+    }>>;
+}, z.core.$strip>;
 export declare const AGENT_TOOLS: ToolDef[];
 export declare const AGENT_TOOL_NAMES: Set<string>;
 /** Pure, exported for tests. */
