@@ -257,6 +257,7 @@ export declare class LightningFaucetClient {
         amountTransferred: number;
         rawResponse: FundAgentResponse;
     }>;
+    private fundAgentUnguarded;
     /**
      * List all agents under this operator
      */

@@ -647,6 +647,18 @@ export class LightningFaucetClient {
       method: 'fund_agent',
     });
 
+    return this.fundAgentUnguarded(agentId, amountSats);
+  }
+
+  private async fundAgentUnguarded(
+    agentId: number,
+    amountSats: number
+  ): Promise<{
+    newOperatorBalance: number;
+    newAgentBalance: number;
+    amountTransferred: number;
+    rawResponse: FundAgentResponse;
+  }> {
     const result = await this.request<FundAgentResponse>('fund_agent', {
       agent_id: agentId,
       amount_sats: amountSats,
@@ -1316,7 +1328,8 @@ export class LightningFaucetClient {
       };
     } else {
       // Use existing fund_agent
-      const result = await this.fundAgent(toAgentId, amountSats);
+      // Already authorized above as transfer_to_agent; skip the fund_agent hook so one transfer is one proposal.
+      const result = await this.fundAgentUnguarded(toAgentId, amountSats);
       return {
         amountTransferred: result.amountTransferred,
         fromBalance: result.newOperatorBalance,

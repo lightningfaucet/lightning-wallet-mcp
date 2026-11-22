@@ -88,3 +88,12 @@ test('control: payLightningAddress is still denied', async () => {
   await assert.rejects(() => new LightningFaucetClient('k').payLightningAddress('a@b.c', 10), (e) => e instanceof PolicyDenied);
   assert.deepEqual(state.actions, []);
 });
+
+test('operator-to-agent transfer sends exactly one proposal', async () => {
+  process.env.PRE_PAYMENT_HOOK_URL = HOOK;
+  const state = stub({ decision: 'allow' });
+  await new LightningFaucetClient('k').transferToAgent(2, 100);
+  assert.equal(state.proposals.length, 1);
+  assert.equal(state.proposals[0].method, 'transfer_to_agent');
+  assert.deepEqual(state.actions, ['fund_agent']);
+});
