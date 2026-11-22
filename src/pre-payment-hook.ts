@@ -11,7 +11,7 @@
  * alone. The proposal deliberately carries NO wallet credentials.
  */
 
-export type PaymentProtocol = 'l402' | 'x402' | 'bolt11' | 'keysend' | 'lnaddress';
+export type PaymentProtocol = 'l402' | 'x402' | 'bolt11' | 'keysend' | 'lnaddress' | 'platform';
 export type HookFailMode = 'closed' | 'open';
 
 export interface PrePaymentProposal {

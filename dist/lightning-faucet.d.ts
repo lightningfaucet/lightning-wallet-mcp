@@ -141,8 +141,11 @@ export declare class LightningFaucetClient {
      * No-op when `PRE_PAYMENT_HOOK_URL` is unset (behaviour is unchanged). When a
      * hook is configured this POSTs a vendor-neutral proposal and throws
      * `PolicyDenied` if the hook — or fail-closed handling of a hook error —
-     * denies the payment. Only the four explicit payment methods call this; it is
-     * invoked before any funds-moving request is sent.
+     * denies the payment. Every method that moves or commits sats calls this before
+     * its funds-moving request is sent: the explicit payment methods (bolt11,
+     * Lightning address, keysend, Nostr zap, L402/X402) and the platform money moves
+     * (fund/sweep/transfer, board tips and bounties, arena entries and rolls, dice and
+     * prediction bets), which use protocol 'platform'.
      */
     private enforcePrePaymentPolicy;
     /**
@@ -254,6 +257,7 @@ export declare class LightningFaucetClient {
         amountTransferred: number;
         rawResponse: FundAgentResponse;
     }>;
+    private fundAgentUnguarded;
     /**
      * List all agents under this operator
      */

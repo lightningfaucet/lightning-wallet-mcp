@@ -235,8 +235,11 @@ export class LightningFaucetClient {
    * No-op when `PRE_PAYMENT_HOOK_URL` is unset (behaviour is unchanged). When a
    * hook is configured this POSTs a vendor-neutral proposal and throws
    * `PolicyDenied` if the hook — or fail-closed handling of a hook error —
-   * denies the payment. Only the four explicit payment methods call this; it is
-   * invoked before any funds-moving request is sent.
+   * denies the payment. Every method that moves or commits sats calls this before
+   * its funds-moving request is sent: the explicit payment methods (bolt11,
+   * Lightning address, keysend, Nostr zap, L402/X402) and the platform money moves
+   * (fund/sweep/transfer, board tips and bounties, arena entries and rolls, dice and
+   * prediction bets), which use protocol 'platform'.
    */
   private async enforcePrePaymentPolicy(params: {
     protocol: PaymentProtocol;
@@ -628,6 +631,26 @@ export class LightningFaucetClient {
    * Fund an agent from operator balance
    */
   async fundAgent(
+    agentId: number,
+    amountSats: number
+  ): Promise<{
+    newOperatorBalance: number;
+    newAgentBalance: number;
+    amountTransferred: number;
+    rawResponse: FundAgentResponse;
+  }> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `fund_agent:agent:${agentId}`,
+      amountSats: amountSats,
+      maxPaymentSats: amountSats,
+      method: 'fund_agent',
+    });
+
+    return this.fundAgentUnguarded(agentId, amountSats);
+  }
+
+  private async fundAgentUnguarded(
     agentId: number,
     amountSats: number
   ): Promise<{
@@ -1173,6 +1196,14 @@ export class LightningFaucetClient {
     newAgentBalance: number;
     rawResponse: ApiResponse;
   }> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `sweep_agent:agent:${agentId}`,
+      amountSats: amountSats === 'all' ? null : amountSats,
+      maxPaymentSats: amountSats === 'all' ? null : amountSats,
+      method: 'sweep_agent',
+    });
+
     const result = await this.request<ApiResponse & {
       amount_transferred?: number;
       new_operator_balance?: number;
@@ -1268,6 +1299,14 @@ export class LightningFaucetClient {
     toBalance: number;
     rawResponse: ApiResponse;
   }> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `transfer_to_agent:agent:${toAgentId}`,
+      amountSats: amountSats,
+      maxPaymentSats: amountSats,
+      method: 'transfer_to_agent',
+    });
+
     // If fromAgentId is provided, it's agent-to-agent; otherwise operator-to-agent
     if (fromAgentId) {
       // This would need a new backend endpoint for agent-to-agent
@@ -1289,7 +1328,8 @@ export class LightningFaucetClient {
       };
     } else {
       // Use existing fund_agent
-      const result = await this.fundAgent(toAgentId, amountSats);
+      // Already authorized above as transfer_to_agent; skip the fund_agent hook so one transfer is one proposal.
+      const result = await this.fundAgentUnguarded(toAgentId, amountSats);
       return {
         amountTransferred: result.amountTransferred,
         fromBalance: result.newOperatorBalance,
@@ -1606,6 +1646,14 @@ export class LightningFaucetClient {
 
   /** Tip a post's author (100% goes to the author). */
   async boardTip(postId: number, amountSats: number): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `board_tip:post:${postId}`,
+      amountSats: amountSats,
+      maxPaymentSats: amountSats,
+      method: 'board_tip',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('board_tip', {
       post_id: postId,
       amount_sats: amountSats,
@@ -1614,6 +1662,14 @@ export class LightningFaucetClient {
 
   /** Create a bounty post and escrow the reward from your balance. */
   async boardBountyCreate(content: string, rewardSats: number, deadlineHours: number): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: 'board_bounty_create',
+      amountSats: rewardSats,
+      maxPaymentSats: rewardSats,
+      method: 'board_bounty_create',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('board_bounty_create', {
       content,
       reward_sats: rewardSats,
@@ -1623,6 +1679,14 @@ export class LightningFaucetClient {
 
   /** Pay part or all of a bounty's escrow to the author of a reply (bounty creator only). */
   async boardBountyAward(bountyId: number, replyId: number, amountSats: number): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `board_bounty_award:bounty:${bountyId}:reply:${replyId}`,
+      amountSats: amountSats,
+      maxPaymentSats: amountSats,
+      method: 'board_bounty_award',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('board_bounty_award', {
       bounty_id: bountyId,
       reply_id: replyId,
@@ -1663,11 +1727,27 @@ export class LightningFaucetClient {
 
   /** Enter an arena tournament; the buy-in moves from the agent balance. */
   async arenaJoin(tournamentId: number): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `arena_join:tournament:${tournamentId}`,
+      amountSats: null,
+      maxPaymentSats: null,
+      method: 'arena_join',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('arena_join', { tournament_id: tournamentId });
   }
 
   /** One dice roll on an entry. */
   async arenaPlay(entryId: number, target?: number, direction?: string): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `arena_play:entry:${entryId}`,
+      amountSats: null,
+      maxPaymentSats: null,
+      method: 'arena_play',
+    });
+
     const data: Record<string, unknown> = { entry_id: entryId };
     if (target !== undefined) data.target = target;
     if (direction !== undefined) data.direction = direction;
@@ -1737,6 +1817,14 @@ export class LightningFaucetClient {
     expected_line_version: number;
     idempotency_key: string;
   }): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `place_bet:market:${p.market_id}`,
+      amountSats: p.amount_sats,
+      maxPaymentSats: p.amount_sats,
+      method: 'place_bet',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('place_bet', {
       market_id: p.market_id,
       position: p.position,
@@ -1753,6 +1841,14 @@ export class LightningFaucetClient {
     direction: 'over' | 'under';
     idempotency_key: string;
   }): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: 'play_dice',
+      amountSats: p.wager_sats,
+      maxPaymentSats: p.wager_sats,
+      method: 'play_dice',
+    });
+
     return this.request<ApiResponse & Record<string, unknown>>('play_dice', {
       wager_sats: p.wager_sats,
       target: p.target,
@@ -1783,6 +1879,14 @@ export class LightningFaucetClient {
     expected_odds_pct?: number;
     expected_line_version?: number;
   }): Promise<Record<string, unknown>> {
+    await this.enforcePrePaymentPolicy({
+      protocol: 'platform',
+      destinationOrUrl: `prediction_place_bet:market:${p.market_id}`,
+      amountSats: p.amount_sats,
+      maxPaymentSats: p.amount_sats,
+      method: 'prediction_place_bet',
+    });
+
     const data: Record<string, unknown> = {
       market_id: p.market_id,
       position: p.position,
