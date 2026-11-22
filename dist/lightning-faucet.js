@@ -97,8 +97,11 @@ class LightningFaucetClient {
      * No-op when `PRE_PAYMENT_HOOK_URL` is unset (behaviour is unchanged). When a
      * hook is configured this POSTs a vendor-neutral proposal and throws
      * `PolicyDenied` if the hook — or fail-closed handling of a hook error —
-     * denies the payment. Only the four explicit payment methods call this; it is
-     * invoked before any funds-moving request is sent.
+     * denies the payment. Every method that moves or commits sats calls this before
+     * its funds-moving request is sent: the explicit payment methods (bolt11,
+     * Lightning address, keysend, Nostr zap, L402/X402) and the platform money moves
+     * (fund/sweep/transfer, board tips and bounties, arena entries and rolls, dice and
+     * prediction bets), which use protocol 'platform'.
      */
     async enforcePrePaymentPolicy(params) {
         const config = (0, pre_payment_hook_js_1.getPrePaymentHookConfig)();
@@ -365,6 +368,13 @@ class LightningFaucetClient {
      * Fund an agent from operator balance
      */
     async fundAgent(agentId, amountSats) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `fund_agent:agent:${agentId}`,
+            amountSats: amountSats,
+            maxPaymentSats: amountSats,
+            method: 'fund_agent',
+        });
         const result = await this.request('fund_agent', {
             agent_id: agentId,
             amount_sats: amountSats,
@@ -671,6 +681,13 @@ class LightningFaucetClient {
      * Sweep funds from agent back to operator
      */
     async sweepAgent(agentId, amountSats) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `sweep_agent:agent:${agentId}`,
+            amountSats: amountSats === 'all' ? null : amountSats,
+            maxPaymentSats: amountSats === 'all' ? null : amountSats,
+            method: 'sweep_agent',
+        });
         const result = await this.request('withdraw_from_agent', amountSats === 'all'
             ? { agent_id: agentId, sweep: true }
             // Partial sweep: do NOT send sweep:true, the backend honours it before amount_sats.
@@ -723,6 +740,13 @@ class LightningFaucetClient {
      * Transfer between agents or from operator to agent
      */
     async transferToAgent(toAgentId, amountSats, fromAgentId) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `transfer_to_agent:agent:${toAgentId}`,
+            amountSats: amountSats,
+            maxPaymentSats: amountSats,
+            method: 'transfer_to_agent',
+        });
         // If fromAgentId is provided, it's agent-to-agent; otherwise operator-to-agent
         if (fromAgentId) {
             // This would need a new backend endpoint for agent-to-agent
@@ -938,6 +962,13 @@ class LightningFaucetClient {
     }
     /** Tip a post's author (100% goes to the author). */
     async boardTip(postId, amountSats) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `board_tip:post:${postId}`,
+            amountSats: amountSats,
+            maxPaymentSats: amountSats,
+            method: 'board_tip',
+        });
         return this.request('board_tip', {
             post_id: postId,
             amount_sats: amountSats,
@@ -945,6 +976,13 @@ class LightningFaucetClient {
     }
     /** Create a bounty post and escrow the reward from your balance. */
     async boardBountyCreate(content, rewardSats, deadlineHours) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: 'board_bounty_create',
+            amountSats: rewardSats,
+            maxPaymentSats: rewardSats,
+            method: 'board_bounty_create',
+        });
         return this.request('board_bounty_create', {
             content,
             reward_sats: rewardSats,
@@ -953,6 +991,13 @@ class LightningFaucetClient {
     }
     /** Pay part or all of a bounty's escrow to the author of a reply (bounty creator only). */
     async boardBountyAward(bountyId, replyId, amountSats) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `board_bounty_award:bounty:${bountyId}:reply:${replyId}`,
+            amountSats: amountSats,
+            maxPaymentSats: amountSats,
+            method: 'board_bounty_award',
+        });
         return this.request('board_bounty_award', {
             bounty_id: bountyId,
             reply_id: replyId,
@@ -989,10 +1034,24 @@ class LightningFaucetClient {
     }
     /** Enter an arena tournament; the buy-in moves from the agent balance. */
     async arenaJoin(tournamentId) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `arena_join:tournament:${tournamentId}`,
+            amountSats: null,
+            maxPaymentSats: null,
+            method: 'arena_join',
+        });
         return this.request('arena_join', { tournament_id: tournamentId });
     }
     /** One dice roll on an entry. */
     async arenaPlay(entryId, target, direction) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `arena_play:entry:${entryId}`,
+            amountSats: null,
+            maxPaymentSats: null,
+            method: 'arena_play',
+        });
         const data = { entry_id: entryId };
         if (target !== undefined)
             data.target = target;
@@ -1055,6 +1114,13 @@ class LightningFaucetClient {
      * Refusals come back as ApiError with the structured reply in .response.
      */
     async placeBet(p) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `place_bet:market:${p.market_id}`,
+            amountSats: p.amount_sats,
+            maxPaymentSats: p.amount_sats,
+            method: 'place_bet',
+        });
         return this.request('place_bet', {
             market_id: p.market_id,
             position: p.position,
@@ -1066,6 +1132,13 @@ class LightningFaucetClient {
     }
     /** Roll provably fair dice with the LINKED account's deposited sats (operator key, after link_account). */
     async playDice(p) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: 'play_dice',
+            amountSats: p.wager_sats,
+            maxPaymentSats: p.wager_sats,
+            method: 'play_dice',
+        });
         return this.request('play_dice', {
             wager_sats: p.wager_sats,
             target: p.target,
@@ -1088,6 +1161,13 @@ class LightningFaucetClient {
      * structured reply in .response.
      */
     async predictionPlaceBet(p) {
+        await this.enforcePrePaymentPolicy({
+            protocol: 'platform',
+            destinationOrUrl: `prediction_place_bet:market:${p.market_id}`,
+            amountSats: p.amount_sats,
+            maxPaymentSats: p.amount_sats,
+            method: 'prediction_place_bet',
+        });
         const data = {
             market_id: p.market_id,
             position: p.position,

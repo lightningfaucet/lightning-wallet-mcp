@@ -32,3 +32,14 @@ test('bolt11: amountless / unparseable / non-invoice -> null', () => {
   assert.equal(bolt11AmountSats(''), null);
   assert.equal(bolt11AmountSats('lnxx2500n1pqdata'), null); // unknown currency prefix
 });
+
+test('bolt11: zero-amount and sub-sat HRPs report unknown, never 0 (bb#343)', () => {
+  for (const hrp of ['lnbc0u', 'lnbc0m', 'lnbc0n', 'lnbc0p', 'lnbc0', 'lnbc000p',
+    'lntb0u', 'lnbcrt0n', 'lnsb0m', 'lnbc500p']) {
+    assert.equal(bolt11AmountSats(hrp + '1pqdata'), null, hrp);
+  }
+  // Positive controls still decode.
+  assert.equal(bolt11AmountSats('lnbc1u1pqdata'), 100);
+  assert.equal(bolt11AmountSats('lnbc2500n1pqdata'), 250);
+  assert.equal(bolt11AmountSats('lnbc20m1pqdata'), 2_000_000);
+});
