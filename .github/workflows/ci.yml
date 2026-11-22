@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Fail on high-severity production dependency vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm test
+      - name: dist/ is committed and must match the build
+        run: git diff --exit-code -- dist

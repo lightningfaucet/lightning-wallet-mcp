@@ -15,7 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PolicyDenied = void 0;
 exports.getPrePaymentHookConfig = getPrePaymentHookConfig;
 exports.runPrePaymentHook = runPrePaymentHook;
+const validate_js_1 = require("./validate.js");
 const DEFAULT_TIMEOUT_MS = 3000;
+const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 /**
  * Read hook configuration from the environment. Returns null when no hook URL is
  * configured, in which case callers MUST behave exactly as before.
@@ -31,8 +33,9 @@ function getPrePaymentHookConfig(env = process.env) {
         return null;
     }
     const timeoutRaw = env.PRE_PAYMENT_HOOK_TIMEOUT_MS?.trim();
-    const parsedTimeout = timeoutRaw ? Number.parseInt(timeoutRaw, 10) : NaN;
-    const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_TIMEOUT_MS;
+    // Strict parse: "5000ms", "abc", negatives, 0 and absurd values fall back to the default.
+    const parsedTimeout = timeoutRaw ? (0, validate_js_1.parseStrictInt)(timeoutRaw, { min: 1, max: MAX_TIMEOUT_MS }) : null;
+    const timeoutMs = parsedTimeout ?? DEFAULT_TIMEOUT_MS;
     // Default fail-closed: when a hook is configured, a hook error denies the payment.
     const failMode = env.PRE_PAYMENT_HOOK_FAIL_MODE?.trim().toLowerCase() === 'open' ? 'open' : 'closed';
     return { url, timeoutMs, failMode };
