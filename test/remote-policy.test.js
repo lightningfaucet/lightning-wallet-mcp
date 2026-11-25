@@ -17,8 +17,14 @@ test('every classified tool exists, and the classes do not overlap', () => {
 });
 
 test('any tool whose name says it pays, sends, bets or moves sats is in MONEY_TOOLS', () => {
-  const moneyish = /^(pay_|keysend|withdraw|fund_|transfer_|sweep_|nostr_zap|claim_|prediction_place_bet|arena_join|board_(post|reply|vote|tip|bounty_create|bounty_award|bounty_close))/;
+  const moneyish = /^(pay_|keysend|withdraw|fund_|transfer_|sweep_|nostr_zap|claim_|prediction_place_bet|arena_(join|play)|board_(post|reply|vote|tip|bounty_create|bounty_award|bounty_close))/;
   for (const n of NAMES) if (moneyish.test(n)) assert.ok(P.MONEY_TOOLS.has(n), `${n} looks money-moving but is not gated`);
+});
+
+test('arena_play is a wager: refused by the kill switch and counted as money', () => {
+  assert.ok(P.MONEY_TOOLS.has('arena_play'));
+  assert.equal(P.decideTool('arena_play', { authenticated: true, killSwitch: true }).error, 'money_tools_disabled');
+  assert.deepEqual(P.decideTool('arena_play', { authenticated: true, killSwitch: false }), { allow: true, money: true });
 });
 
 test('decideTool: anonymous, authenticated, stdio-only and kill switch', () => {
