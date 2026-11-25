@@ -73,6 +73,7 @@ export const MONEY_TOOLS: ReadonlySet<string> = new Set([
   'board_bounty_award',
   'board_bounty_close',
   'arena_join',
+  'arena_play',
   'prediction_place_bet',
 ]);
 
